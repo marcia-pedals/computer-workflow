@@ -51,21 +51,21 @@ g = Github(auth=Auth.Token(token))
 
 repo = g.get_repo(REPO)
 
-def claim_issue(issue, worker_num=None):
+def claim_issue(issue, task_num=None):
     """Add the 'claimed' label to an issue."""
     issue.add_to_labels("claimed")
-    prefix = f"[{worker_num}] " if worker_num is not None else ""
+    prefix = f"[{task_num}] " if task_num is not None else ""
     print(f"{prefix}Added 'claimed' label to issue #{issue.number}")
 
-def unclaim_issue(issue, worker_num=None):
+def unclaim_issue(issue, task_num=None):
     """Remove the 'claimed' label from a PR (not a regular issue)."""
     if issue.pull_request is None:
         return  # Only unclaim PRs, not regular issues
     issue.remove_from_labels("claimed")
-    prefix = f"[{worker_num}] " if worker_num is not None else ""
+    prefix = f"[{task_num}] " if task_num is not None else ""
     print(f"{prefix}Removed 'claimed' label from PR #{issue.number}")
 
-def re_request_reviews(issue, worker_num=None):
+def re_request_reviews(issue, task_num=None):
     """Re-request reviews from all reviewers who previously reviewed the PR."""
     if issue.pull_request is None:
         return  # Not a PR, nothing to do
@@ -81,12 +81,12 @@ def re_request_reviews(issue, worker_num=None):
     if reviewers:
         # Re-request reviews from all reviewers
         pr.create_review_request(reviewers=list(reviewers))
-        prefix = f"[{worker_num}] " if worker_num is not None else ""
+        prefix = f"[{task_num}] " if task_num is not None else ""
         print(f"{prefix}Re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
 
-def parse_and_display_stream_line(line, worker_num=None):
+def parse_and_display_stream_line(line, task_num=None):
     """Parse a JSON stream line and display relevant information."""
-    prefix = f"[{worker_num}] " if worker_num is not None else ""
+    prefix = f"[{task_num}] " if task_num is not None else ""
     try:
         data = json.loads(line)
 
@@ -121,14 +121,14 @@ def parse_and_display_stream_line(line, worker_num=None):
         # If it's not valid JSON, just pass it through
         pass
 
-def process_issue(issue, worker_num=None):
+def process_issue(issue, task_num=None):
     """Clone the repo, run Claude Code on the issue, return True on success."""
     token = get_token()
-    prefix = f"[{worker_num}] " if worker_num is not None else ""
+    prefix = f"[{task_num}] " if task_num is not None else ""
     print(f"{prefix}Working on #{issue.number}: {issue.title}")
 
     # Claim the issue by adding the 'claimed' label
-    claim_issue(issue, worker_num)
+    claim_issue(issue, task_num)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Prevent git from trying GUI/interactive credential prompts
@@ -209,15 +209,15 @@ def process_issue(issue, worker_num=None):
         proc.stdin.close()
 
         for line in proc.stdout:
-            parse_and_display_stream_line(line, worker_num)
+            parse_and_display_stream_line(line, task_num)
 
         proc.wait()
 
         if proc.returncode == 0:
             print(f"\n{prefix}✅ Successfully processed issue #{issue.number}")
             # After successful processing, remove claimed label and re-request reviews
-            unclaim_issue(issue, worker_num)
-            re_request_reviews(issue, worker_num)
+            unclaim_issue(issue, task_num)
+            re_request_reviews(issue, task_num)
         else:
             print(f"\n{prefix}❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})")
 
@@ -256,37 +256,40 @@ def get_unprocessed_issue():
 if args.poll:
     print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {}
-        next_worker_num = 0
+        # List of 3-tuples: (future, issue_number, task_num)
+        active_tasks = []
+        next_task_num = 0
 
         while True:
             # Remove completed futures
-            completed = [f for f in futures if f.done()]
-            for f in completed:
-                del futures[f]
+            active_tasks = [(f, issue_num, task_num) for f, issue_num, task_num in active_tasks if not f.done()]
 
             # If we have capacity, try to get a new issue
-            if len(futures) < MAX_WORKERS:
+            if len(active_tasks) < MAX_WORKERS:
                 issue = get_unprocessed_issue()
                 if issue is not None:
-                    worker_num = next_worker_num % MAX_WORKERS
-                    next_worker_num += 1
-                    print(f"[{worker_num}] Assigning issue #{issue.number} to worker {worker_num}")
-                    future = executor.submit(process_issue, issue, worker_num)
-                    futures[future] = (issue.number, worker_num)
-                elif len(futures) == 0:
+                    task_num = next_task_num
+                    next_task_num += 1
+                    print(f"[{task_num}] Assigning issue #{issue.number} to task {task_num}")
+                    future = executor.submit(process_issue, issue, task_num)
+                    active_tasks.append((future, issue.number, task_num))
+                elif len(active_tasks) == 0:
                     # No issues and no active workers
                     print(f"No unprocessed issues. Waiting {POLL_INTERVAL}s...")
                     time.sleep(POLL_INTERVAL)
                     continue
 
             # If all workers are busy, wait for at least one to complete
-            if len(futures) >= MAX_WORKERS:
+            if len(active_tasks) >= MAX_WORKERS:
                 # Block until at least one worker is done
-                completed_future = next(as_completed(futures))
-                issue_num, worker_num = futures[completed_future]
-                del futures[completed_future]
-                print(f"[{worker_num}] Worker {worker_num} finished processing issue #{issue_num}")
+                futures_only = [f for f, _, _ in active_tasks]
+                completed_future = next(as_completed(futures_only))
+                # Find the matching task
+                for i, (f, issue_num, task_num) in enumerate(active_tasks):
+                    if f == completed_future:
+                        active_tasks.pop(i)
+                        print(f"[{task_num}] Task {task_num} finished processing issue #{issue_num}")
+                        break
             else:
                 # Brief sleep to avoid tight loop when we have capacity but no issues
                 time.sleep(1)
