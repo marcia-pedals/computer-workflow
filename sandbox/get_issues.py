@@ -249,7 +249,6 @@ def _pr_has_unaddressed_review_comments(repo, pr_number):
     for review in pr.get_reviews():
         if review.state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
             latest_by_author[review.user.login] = review.state
-    print(repo, pr_number, latest_by_author)
     return "CHANGES_REQUESTED" in latest_by_author.values()
 
 
