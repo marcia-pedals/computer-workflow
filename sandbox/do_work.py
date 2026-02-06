@@ -175,20 +175,20 @@ def do_work(issue, task_num=None):
           else:
             prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
-          token_path = os.path.expanduser("~/.github-app-token")
+          display_token_path = os.path.expanduser("~/.github-app-token")
           if issue.pull_request is None:
             prompt = (
               f"Make a pull request resolving issue #{issue.number}.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running do_work.py " +
-              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {display_token_path}"
             )
           else:
             prompt = (
               f"Update #{issue.number} to address the latest review.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running do_work.py " +
-              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {display_token_path}"
             )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
