@@ -1,5 +1,7 @@
+import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -86,27 +88,46 @@ while True:
             "GIT_TERMINAL_PROMPT": "0",
         }
 
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [
                 "claude",
                 "--print",
+                "--output-format", "stream-json",
                 "--verbose",
                 "--dangerously-skip-permissions",
                 "--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep",
             ],
-            input=prompt,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=tmpdir,
             env=env,
         )
 
+        proc.stdin.write(prompt)
+        proc.stdin.close()
+
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                print(line, flush=True)
+                continue
+            print(json.dumps(event), flush=True)
+
+        proc.wait()
+
         # Mark this issue as processed regardless of success/failure
         processed_issues.add(issue.number)
 
-        if result.returncode == 0:
+        if proc.returncode == 0:
             print(f"Successfully processed issue #{issue.number}")
         else:
-            print(f"Failed to process issue #{issue.number} (exit code: {result.returncode})")
+            print(f"Failed to process issue #{issue.number} (exit code: {proc.returncode})")
 
     print(f"Waiting {POLL_INTERVAL} seconds before checking for new issues...")
     time.sleep(POLL_INTERVAL)
