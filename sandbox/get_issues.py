@@ -188,38 +188,22 @@ def process_issue(issue, reason="issue", task_num=None):
             pr_branch = pr.head.ref
             pr_repo = pr.head.repo.full_name if pr.head.repo else REPO
 
-            # If PR is from a fork, add the fork as a remote and fetch
+            # Only handle PRs from the same repo, not forks
             if pr_repo != REPO:
-                subprocess.run(
-                    ["git", "remote", "add", "pr-fork", f"https://github.com/{pr_repo}.git"],
-                    cwd=tmpdir,
-                    check=True,
-                    env=clone_env,
-                )
-                subprocess.run(
-                    ["git", "fetch", "pr-fork", pr_branch],
-                    cwd=tmpdir,
-                    check=True,
-                    env=clone_env,
-                )
-                subprocess.run(
-                    ["git", "checkout", "-b", pr_branch, f"pr-fork/{pr_branch}"],
-                    cwd=tmpdir,
-                    check=True,
-                )
-            else:
-                # PR is from the same repo, just fetch and checkout
-                subprocess.run(
-                    ["git", "fetch", "origin", pr_branch],
-                    cwd=tmpdir,
-                    check=True,
-                    env=clone_env,
-                )
-                subprocess.run(
-                    ["git", "checkout", "-b", pr_branch, f"origin/{pr_branch}"],
-                    cwd=tmpdir,
-                    check=True,
-                )
+                raise Exception(f"PR #{issue.number} is from a fork ({pr_repo}). Fork PRs are not supported.")
+
+            # PR is from the same repo, fetch and checkout
+            subprocess.run(
+                ["git", "fetch", "origin", pr_branch],
+                cwd=tmpdir,
+                check=True,
+                env=clone_env,
+            )
+            subprocess.run(
+                ["git", "checkout", "-b", pr_branch, f"origin/{pr_branch}"],
+                cwd=tmpdir,
+                check=True,
+            )
             print(f"{prefix}Checked out PR branch: {pr_branch}")
 
         if args.test_prompt:
