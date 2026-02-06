@@ -89,7 +89,7 @@ def parse_and_display_stream_line(line):
         # If it's not valid JSON, just pass it through
         pass
 
-def process_issue(issue):
+def do_work(issue):
     """Clone the repo, run Claude Code on the issue, return True on success."""
     token = get_token()
     print(f"Working on #{issue.number}: {issue.title}")
@@ -220,7 +220,7 @@ if args.poll:
             time.sleep(POLL_INTERVAL)
             continue
 
-        process_issue(issue)
+        do_work(issue)
 
         print(f"Waiting {POLL_INTERVAL} seconds before checking for new issues...")
         time.sleep(POLL_INTERVAL)
@@ -229,4 +229,4 @@ else:
     if issue is None:
         print("No unprocessed open issues found.")
     else:
-        process_issue(issue)
+        do_work(issue)
