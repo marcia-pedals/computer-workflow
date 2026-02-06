@@ -54,33 +54,29 @@ def claim_issue(issue):
     print(f"Added 'claimed' label to issue #{issue.number}")
 
 def unclaim_issue(issue):
-    """Remove the 'claimed' label from an issue."""
-    try:
-        issue.remove_from_labels("claimed")
-        print(f"Removed 'claimed' label from issue #{issue.number}")
-    except Exception as e:
-        print(f"Warning: Could not remove 'claimed' label from issue #{issue.number}: {e}")
+    """Remove the 'claimed' label from a PR (not a regular issue)."""
+    if issue.pull_request is None:
+        return  # Only unclaim PRs, not regular issues
+    issue.remove_from_labels("claimed")
+    print(f"Removed 'claimed' label from PR #{issue.number}")
 
 def re_request_reviews(issue):
     """Re-request reviews from all reviewers who previously reviewed the PR."""
     if issue.pull_request is None:
         return  # Not a PR, nothing to do
 
-    try:
-        pr = repo.get_pull(issue.number)
-        reviewers = set()
+    pr = repo.get_pull(issue.number)
+    reviewers = set()
 
-        # Collect all users who have reviewed this PR
-        for review in pr.get_reviews():
-            if review.user.login != pr.user.login:  # Don't request review from PR author
-                reviewers.add(review.user.login)
+    # Collect all users who have reviewed this PR
+    for review in pr.get_reviews():
+        if review.user.login != pr.user.login:  # Don't request review from PR author
+            reviewers.add(review.user.login)
 
-        if reviewers:
-            # Re-request reviews from all reviewers
-            pr.create_review_request(reviewers=list(reviewers))
-            print(f"Re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
-    except Exception as e:
-        print(f"Warning: Could not re-request reviews on PR #{issue.number}: {e}")
+    if reviewers:
+        # Re-request reviews from all reviewers
+        pr.create_review_request(reviewers=list(reviewers))
+        print(f"Re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
 
 def parse_and_display_stream_line(line):
     """Parse a JSON stream line and display relevant information."""
