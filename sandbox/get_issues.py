@@ -47,12 +47,19 @@ token = get_token()
 g = Github(auth=Auth.Token(token))
 
 repo = g.get_repo(REPO)
-processed_issues = set()
+
+def claim_issue(issue):
+    """Add the 'claimed' label to an issue."""
+      issue.add_to_labels("claimed")
+      print(f"Added 'claimed' label to issue #{issue.number}")
 
 def process_issue(issue):
     """Clone the repo, run Claude Code on the issue, return True on success."""
     token = get_token()
     print(f"Working on #{issue.number}: {issue.title}")
+
+    # Claim the issue by adding the 'claimed' label
+    claim_issue(issue)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Prevent git from trying GUI/interactive credential prompts
@@ -147,7 +154,11 @@ def get_unprocessed_issue():
     if not issues:
         return None
 
-    unprocessed = [i for i in issues if i.number not in processed_issues]
+    # Filter out issues that are already claimed
+    unprocessed = [
+        i for i in issues
+        and not any(label.name == "claimed" for label in i.labels)
+    ]
     return unprocessed[0] if unprocessed else None
 
 
@@ -161,7 +172,6 @@ if args.poll:
             continue
 
         process_issue(issue)
-        processed_issues.add(issue.number)
 
         print(f"Waiting {POLL_INTERVAL} seconds before checking for new issues...")
         time.sleep(POLL_INTERVAL)
