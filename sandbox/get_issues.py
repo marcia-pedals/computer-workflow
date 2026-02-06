@@ -50,8 +50,8 @@ repo = g.get_repo(REPO)
 
 def claim_issue(issue):
     """Add the 'claimed' label to an issue."""
-      issue.add_to_labels("claimed")
-      print(f"Added 'claimed' label to issue #{issue.number}")
+    issue.add_to_labels("claimed")
+    print(f"Added 'claimed' label to issue #{issue.number}")
 
 def process_issue(issue):
     """Clone the repo, run Claude Code on the issue, return True on success."""
@@ -109,10 +109,10 @@ def process_issue(issue):
             [
                 "claude",
                 "--print",
-                "--output-format", "stream-json",
-                "--verbose",
+                # "--output-format", "stream-json",
+                # "--verbose",
                 "--dangerously-skip-permissions",
-                "--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep",
+                # "--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep",
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
