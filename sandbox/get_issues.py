@@ -87,6 +87,44 @@ def re_request_reviews(issue, task_num=None):
         pr.create_review_request(reviewers=list(reviewers))
         print(f"{prefix}Dismissed stale reviews and re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
 
+def check_pr_mergeability(issue_number, task_num=None):
+    """Check if a PR is mergeable. Returns (has_pr, is_mergeable, pr)."""
+    prefix = f"[{task_num}] " if task_num is not None else ""
+    token = get_token()
+    g = Github(auth=Auth.Token(token))
+    repo_obj = g.get_repo(REPO)
+
+    # Check if there's a PR for this issue
+    prs = list(repo_obj.get_pulls(state='open', head=f"{repo_obj.owner.login}:issue-{issue_number}"))
+    if not prs:
+        # No PR found with the expected branch name, check if the issue itself is a PR
+        issue = repo_obj.get_issue(issue_number)
+        if issue.pull_request is None:
+            return (False, None, None)
+        pr = repo_obj.get_pull(issue_number)
+    else:
+        pr = prs[0]
+
+    # Refresh the PR to get latest mergeability status
+    # Note: mergeable can be None if GitHub is still computing it
+    max_retries = 5
+    for i in range(max_retries):
+        pr = repo_obj.get_pull(pr.number)
+        if pr.mergeable is not None:
+            break
+        if i < max_retries - 1:
+            print(f"{prefix}Waiting for GitHub to compute mergeability status...")
+            time.sleep(2)
+
+    is_mergeable = pr.mergeable if pr.mergeable is not None else True  # Assume mergeable if unknown
+
+    if not is_mergeable:
+        print(f"{prefix}⚠️  PR #{pr.number} has merge conflicts and is not mergeable")
+    else:
+        print(f"{prefix}✅ PR #{pr.number} is mergeable")
+
+    return (True, is_mergeable, pr)
+
 def parse_and_display_stream_line(line, task_num=None):
     """Parse a JSON stream line and display relevant information."""
     prefix = f"[{task_num}] " if task_num is not None else ""
@@ -123,6 +161,45 @@ def parse_and_display_stream_line(line, task_num=None):
     except json.JSONDecodeError:
         # If it's not valid JSON, just pass it through
         pass
+
+def run_claude_on_issue(issue, tmpdir, prompt, task_num=None):
+    """Run Claude Code with the given prompt in the given directory."""
+    token = get_token()
+    prefix = f"[{task_num}] " if task_num is not None else ""
+
+    # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
+    # Disable interactive git prompts in case macOS keychain dialog triggers.
+    env = {
+        **os.environ,
+        "PATH": f"{BIN_DIR}:{os.environ.get('PATH', '')}",
+        "GIT_TERMINAL_PROMPT": "0",
+        "CW_GITHUB_TOKEN_PATH": str(token_path),
+    }
+
+    proc = subprocess.Popen(
+        [
+            "claude",
+            "--print",
+            "--dangerously-skip-permissions",
+            "--output-format", "stream-json",
+            "--verbose",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=tmpdir,
+        env=env,
+    )
+
+    proc.stdin.write(prompt)
+    proc.stdin.close()
+
+    for line in proc.stdout:
+        parse_and_display_stream_line(line, task_num)
+
+    proc.wait()
+    return proc.returncode == 0
 
 def process_issue(issue, task_num=None):
     """Clone the repo, run Claude Code on the issue, return True on success."""
@@ -183,46 +260,38 @@ def process_issue(issue, task_num=None):
               "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
             )
 
-        # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
-        # Disable interactive git prompts in case macOS keychain dialog triggers.
-        env = {
-            **os.environ,
-            "PATH": f"{BIN_DIR}:{os.environ.get('PATH', '')}",
-            "GIT_TERMINAL_PROMPT": "0",
-            "CW_GITHUB_TOKEN_PATH": str(token_path),
-        }
+        success = run_claude_on_issue(issue, tmpdir, prompt, task_num)
 
-        proc = subprocess.Popen(
-            [
-                "claude",
-                "--print",
-                "--dangerously-skip-permissions",
-                "--output-format", "stream-json",
-                "--verbose",
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=tmpdir,
-            env=env,
-        )
-
-        proc.stdin.write(prompt)
-        proc.stdin.close()
-
-        for line in proc.stdout:
-            parse_and_display_stream_line(line, task_num)
-
-        proc.wait()
-
-        if proc.returncode == 0:
+        if success:
             print(f"\n{prefix}✅ Successfully processed issue #{issue.number}")
+
+            # Check if a PR was created/updated and if it's mergeable
+            has_pr, is_mergeable, pr = check_pr_mergeability(issue.number, task_num)
+
+            if has_pr and not is_mergeable:
+                # PR has merge conflicts, ask Claude to resolve them
+                print(f"{prefix}🔧 Attempting to resolve merge conflicts...")
+                conflict_prompt = (
+                    f"The PR for issue #{issue.number} has merge conflicts with the main branch. "
+                    "Please resolve these conflicts and push the updated code."
+                )
+                conflict_success = run_claude_on_issue(issue, tmpdir, conflict_prompt, task_num)
+
+                if conflict_success:
+                    # Check mergeability again after conflict resolution
+                    has_pr, is_mergeable, pr = check_pr_mergeability(issue.number, task_num)
+                    if has_pr and is_mergeable:
+                        print(f"{prefix}✅ Merge conflicts resolved successfully")
+                    else:
+                        print(f"{prefix}⚠️  Merge conflicts may not be fully resolved")
+                else:
+                    print(f"{prefix}❌ Failed to resolve merge conflicts")
+
             # After successful processing, remove claimed label and re-request reviews
             unclaim_issue(issue, task_num)
             re_request_reviews(issue, task_num)
         else:
-            print(f"\n{prefix}❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})")
+            print(f"\n{prefix}❌ Failed to process issue #{issue.number}")
 
 
 def _pr_has_unaddressed_review_comments(repo, pr_number):
