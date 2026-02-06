@@ -53,6 +53,42 @@ def claim_issue(issue):
     issue.add_to_labels("claimed")
     print(f"Added 'claimed' label to issue #{issue.number}")
 
+def parse_and_display_stream_line(line):
+    """Parse a JSON stream line and display relevant information."""
+    try:
+        data = json.loads(line)
+
+        # Handle TODO tool usage
+        if data.get("type") == "user" and "tool_use_result" in data:
+            result = data["tool_use_result"]
+            if "newTodos" in result:
+                new_todos = result["newTodos"]
+                if new_todos:
+                    print("\n📋 Todo List Updated:")
+                    for todo in new_todos:
+                        status_icon = {
+                            "in_progress": "🔄",
+                            "completed": "✅",
+                            "pending": "⏳"
+                        }.get(todo["status"], "•")
+                        print(f"  {status_icon} {todo['content']} ({todo['status']})")
+                    print()
+
+        # Handle assistant text messages (but filter out tool-related ones)
+        elif data.get("type") == "assistant":
+            message = data.get("message", {})
+            content = message.get("content", [])
+            for item in content:
+                if item.get("type") == "text":
+                    text = item.get("text", "").strip()
+                    # Only print if it's not empty
+                    if text:
+                        print(f"💬 {text}")
+
+    except json.JSONDecodeError:
+        # If it's not valid JSON, just pass it through
+        pass
+
 def process_issue(issue):
     """Clone the repo, run Claude Code on the issue, return True on success."""
     token = get_token()
@@ -110,6 +146,8 @@ def process_issue(issue):
                 "claude",
                 "--print",
                 "--dangerously-skip-permissions",
+                "--output-format", "stream-json",
+                "--verbose",
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -123,14 +161,14 @@ def process_issue(issue):
         proc.stdin.close()
 
         for line in proc.stdout:
-            print(line, end="", flush=True)
+            parse_and_display_stream_line(line)
 
         proc.wait()
 
         if proc.returncode == 0:
-            print(f"Successfully processed issue #{issue.number}")
+            print(f"\n✅ Successfully processed issue #{issue.number}")
         else:
-            print(f"Failed to process issue #{issue.number} (exit code: {proc.returncode})")
+            print(f"\n❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})")
 
 
 def get_unprocessed_issue():
