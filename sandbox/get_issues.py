@@ -78,7 +78,12 @@ while True:
     print(f"Working on #{issue.number}: {issue.title}")
 
     # Add "claimed" label to prevent duplicate processing
-    issue.add_to_labels("claimed")
+    try:
+        issue.add_to_labels("claimed")
+        print(f"Added 'claimed' label to issue #{issue.number}")
+    except Exception as e:
+        print(f"Warning: Could not add 'claimed' label to issue #{issue.number}: {e}")
+        print("Continuing with issue processing anyway...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Prevent git from trying GUI/interactive credential prompts
