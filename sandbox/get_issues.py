@@ -63,8 +63,12 @@ while True:
         time.sleep(POLL_INTERVAL)
         continue
 
-    # Find unprocessed issues (sorted by created date descending by default)
-    unprocessed_issues = [issue for issue in issues if issue.number not in processed_issues]
+    # Filter out issues with the "claimed" label and already processed issues
+    unprocessed_issues = [
+        issue for issue in issues
+        if issue.number not in processed_issues
+        and "claimed" not in [label.name for label in issue.labels]
+    ]
 
     if not unprocessed_issues:
         print(f"All {len(issues)} open issue(s) already processed. Waiting for new issues...")
@@ -74,6 +78,13 @@ while True:
     # Process the latest unprocessed issue
     issue = unprocessed_issues[0]
     print(f"Working on #{issue.number}: {issue.title}")
+
+    # Add the "claimed" label to the issue
+    try:
+        issue.add_to_labels("claimed")
+        print(f"Added 'claimed' label to issue #{issue.number}")
+    except Exception as e:
+        print(f"Warning: Failed to add 'claimed' label to issue #{issue.number}: {e}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Prevent git from trying GUI/interactive credential prompts
