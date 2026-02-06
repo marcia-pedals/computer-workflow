@@ -33,21 +33,42 @@ fi
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o PreferredAuthentications=password -o ConnectTimeout=3)
 export SSHPASS=admin
 
+# Retry helper: run an ssh/scp command with retries
+ssh_retry() {
+  local max_retries=5
+  for i in $(seq 1 "$max_retries"); do
+    if "$@" 2>/dev/null; then return 0; fi
+    echo "  retry $i/$max_retries..."
+    sleep 3
+  done
+  echo "ERROR: command failed after $max_retries retries: $*"
+  exit 1
+}
+
+SSH_REACHABLE=false
 for i in $(seq 1 30); do
-  if sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" true 2>/dev/null; then break; fi
+  if sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" true 2>/dev/null; then
+    SSH_REACHABLE=true
+    break
+  fi
   sleep 2
 done
+
+if ! $SSH_REACHABLE; then
+  echo "ERROR: VM SSH not reachable after 60s"
+  exit 1
+fi
 
 echo "VM is SSH-reachable."
 
 # --- Copy project files into the VM ---
 echo "Copying files into VM..."
-sshpass -e scp -r "${SSH_OPTS[@]}" "$SANDBOX_DIR" "admin@$VM_IP:computer-workflow"
-sshpass -e scp "${SSH_OPTS[@]}" "$REPO_DIR/flake.nix" "$REPO_DIR/flake.lock" "admin@$VM_IP:computer-workflow/"
+ssh_retry sshpass -e scp -r "${SSH_OPTS[@]}" "$SANDBOX_DIR" "admin@$VM_IP:computer-workflow"
+ssh_retry sshpass -e scp "${SSH_OPTS[@]}" "$REPO_DIR/flake.nix" "$REPO_DIR/flake.lock" "admin@$VM_IP:computer-workflow/"
 
 # --- Run the build script inside the VM ---
 echo "Running sandbox-build-inner.sh inside VM..."
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "bash computer-workflow/sandbox-build-inner.sh"
+ssh_retry sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "bash computer-workflow/sandbox-build-inner.sh"
 
 # --- Stop VM (preserve for future runs) ---
 echo "Stopping VM..."

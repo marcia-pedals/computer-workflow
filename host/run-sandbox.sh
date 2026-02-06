@@ -68,23 +68,44 @@ fi
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o PreferredAuthentications=password -o ConnectTimeout=3)
 export SSHPASS=admin
 
+# Retry helper: run an ssh/scp command with retries
+ssh_retry() {
+  local max_retries=5
+  for i in $(seq 1 "$max_retries"); do
+    if "$@" 2>/dev/null; then return 0; fi
+    echo "  retry $i/$max_retries..."
+    sleep 3
+  done
+  echo "ERROR: command failed after $max_retries retries: $*"
+  exit 1
+}
+
+SSH_REACHABLE=false
 for i in $(seq 1 30); do
-  if sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" true 2>/dev/null; then break; fi
+  if sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" true 2>/dev/null; then
+    SSH_REACHABLE=true
+    break
+  fi
   sleep 2
 done
+
+if ! $SSH_REACHABLE; then
+  echo "ERROR: VM SSH not reachable after 60s"
+  exit 1
+fi
 
 echo "VM is SSH-reachable."
 
 # --- Clean previous state ---
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "rm -rf ~/computer-workflow ~/environment"
+ssh_retry sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "rm -rf ~/computer-workflow ~/environment"
 
 # --- Copy project files into the VM ---
 echo "Copying files into VM..."
-sshpass -e scp -r "${SSH_OPTS[@]}" "$SANDBOX_DIR" "admin@$VM_IP:computer-workflow"
-sshpass -e scp "${SSH_OPTS[@]}" "$REPO_DIR/flake.nix" "$REPO_DIR/flake.lock" "admin@$VM_IP:computer-workflow/"
+ssh_retry sshpass -e scp -r "${SSH_OPTS[@]}" "$SANDBOX_DIR" "admin@$VM_IP:computer-workflow"
+ssh_retry sshpass -e scp "${SSH_OPTS[@]}" "$REPO_DIR/flake.nix" "$REPO_DIR/flake.lock" "admin@$VM_IP:computer-workflow/"
 
 # --- Copy test environment files into the VM ---
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "mkdir -p ~/environment"
+ssh_retry sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "mkdir -p ~/environment"
 python3 -c "
 import json, sys
 for p in json.load(open(sys.argv[1])).get('test_environment', []):
@@ -92,13 +113,13 @@ for p in json.load(open(sys.argv[1])).get('test_environment', []):
 " "$ENV_FILE" | while read -r filepath; do
   expanded=$(python3 -c "import os,sys; print(os.path.expanduser(sys.argv[1]))" "$filepath")
   echo "Copying test env file: $expanded"
-  sshpass -e scp "${SSH_OPTS[@]}" "$expanded" "admin@$VM_IP:environment/"
+  ssh_retry sshpass -e scp "${SSH_OPTS[@]}" "$expanded" "admin@$VM_IP:environment/"
 done
 
 # --- Push Claude Code OAuth token ---
 echo "Pushing Claude Code token..."
 CLAUDE_TOKEN=$(cat ~/personal-projects/.secrets/claude-sub)
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "echo '$CLAUDE_TOKEN' > ~/.claude-oauth-token"
+ssh_retry sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "echo '$CLAUDE_TOKEN' > ~/.claude-oauth-token"
 echo "Claude token pushed."
 
 # --- Push initial token and start refresh loop ---
@@ -107,4 +128,4 @@ REFRESH_PID=$!
 
 # --- Run the inner script ---
 echo "Running sandbox-inner.sh inside VM..."
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "TARGET_REPO='$TARGET_REPO' bash computer-workflow/sandbox-inner.sh"
+ssh_retry sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "TARGET_REPO='$TARGET_REPO' bash computer-workflow/sandbox-inner.sh"
