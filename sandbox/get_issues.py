@@ -47,15 +47,11 @@ token = get_token()
 g = Github(auth=Auth.Token(token))
 
 repo = g.get_repo(REPO)
-processed_issues = set()
 
 def claim_issue(issue):
     """Add the 'claimed' label to an issue."""
-    try:
-        issue.add_to_labels("claimed")
-        print(f"Added 'claimed' label to issue #{issue.number}")
-    except Exception as e:
-        print(f"Warning: Failed to add 'claimed' label to issue #{issue.number}: {e}")
+      issue.add_to_labels("claimed")
+      print(f"Added 'claimed' label to issue #{issue.number}")
 
 def process_issue(issue):
     """Clone the repo, run Claude Code on the issue, return True on success."""
@@ -158,10 +154,9 @@ def get_unprocessed_issue():
     if not issues:
         return None
 
-    # Filter out issues that are already claimed or processed
+    # Filter out issues that are already claimed
     unprocessed = [
         i for i in issues
-        if i.number not in processed_issues
         and not any(label.name == "claimed" for label in i.labels)
     ]
     return unprocessed[0] if unprocessed else None
@@ -177,7 +172,6 @@ if args.poll:
             continue
 
         process_issue(issue)
-        processed_issues.add(issue.number)
 
         print(f"Waiting {POLL_INTERVAL} seconds before checking for new issues...")
         time.sleep(POLL_INTERVAL)
