@@ -19,11 +19,23 @@
             pkgs.tart
             pkgs.softnet
             pkgs.sshpass
+            (pkgs.python3.withPackages (ps: [
+              ps.pygithub
+            ]))
           ];
 
-          shellHook = ''
-            echo "tart available"
-          '';
+          shellHook = '''';
+        };
+
+        devShells.sandbox = pkgs.mkShell {
+          packages = [
+            pkgs.nodejs
+            pkgs.gh
+            pkgs.git
+            (pkgs.python3.withPackages (ps: [
+              ps.pygithub
+            ]))
+          ];
         };
       });
 }
