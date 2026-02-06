@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser(description="Poll GitHub issues and process the
 parser.add_argument("--repo", required=True, help="Target GitHub repo (owner/name)")
 parser.add_argument("--poll", action="store_true", help="Poll continuously for new issues instead of processing one and exiting")
 parser.add_argument("--test-prompt", action="store_true", help="Use a simplified prompt for faster testing")
+parser.add_argument("--process-issue", type=int, metavar="ISSUE_NUMBER", help="Process a specific issue number instead of finding the next unprocessed one")
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--token-path", help="Path to a file containing a GitHub token")
 group.add_argument("--secret-key-path", help="Path to the GitHub App private key PEM file")
@@ -169,7 +170,7 @@ def process_issue(issue, task_num=None):
               f"Make a pull request resolving issue #{issue.number}.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path $HOME/.github-app-token\n\n" +
+              "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path $HOME/.github-app-token\n\n" +
               "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
               "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
             )
@@ -178,7 +179,7 @@ def process_issue(issue, task_num=None):
               f"Update #{issue.number} to address the latest review.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path $HOME/.github-app-token\n\n" +
+              "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path $HOME/.github-app-token\n\n" +
               "If you can't accomplish the task or can't test your work, add a comment to the PR explaining why.\n\n" +
               "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
             )
@@ -258,6 +259,9 @@ def get_unprocessed_issue():
 
 
 if args.poll:
+    if args.process_issue:
+        print("Error: --poll and --process-issue cannot be used together")
+        exit(1)
     print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         # List of 3-tuples: (future, issue_number, task_num)
@@ -298,8 +302,14 @@ if args.poll:
                 # Brief sleep to avoid tight loop when we have capacity but no issues
                 time.sleep(1)
 else:
-    issue = get_unprocessed_issue()
-    if issue is None:
-        print("No unprocessed open issues found.")
-    else:
+    if args.process_issue:
+        # Process a specific issue by number
+        issue = repo.get_issue(args.process_issue)
         process_issue(issue)
+    else:
+        # Find and process the next unprocessed issue
+        issue = get_unprocessed_issue()
+        if issue is None:
+            print("No unprocessed open issues found.")
+        else:
+            process_issue(issue)
