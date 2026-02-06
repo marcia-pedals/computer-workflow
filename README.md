@@ -1,4 +1,4 @@
-# computer-workflow
+# 🤖 computer-workflow
 
 The computer watches your GitHub Issues and makes PRs for them.
 
