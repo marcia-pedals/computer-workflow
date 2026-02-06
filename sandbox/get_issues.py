@@ -109,7 +109,6 @@ def process_issue(issue):
             [
                 "claude",
                 "--print",
-                "--output-format", "stream-json",
                 "--dangerously-skip-permissions",
             ],
             stdin=subprocess.PIPE,
@@ -124,15 +123,7 @@ def process_issue(issue):
         proc.stdin.close()
 
         for line in proc.stdout:
-            line = line.rstrip("\n")
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                print(line, flush=True)
-                continue
-            print(json.dumps(event), flush=True)
+            print(line, end="", flush=True)
 
         proc.wait()
 
@@ -158,7 +149,7 @@ def get_unprocessed_issue():
         if i.pull_request is None  # Filter out PRs
         and not any(label.name == "claimed" for label in i.labels)
     ]
-    return unprocessed[0] if unprocessed else None
+    return unprocessed[-1] if unprocessed else None
 
 
 if args.poll:
