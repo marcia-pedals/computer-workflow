@@ -56,7 +56,9 @@ while True:
     g = Github(auth=Auth.Token(token))
     repo = g.get_repo(REPO)
 
-    issues = list(repo.get_issues(state="open"))
+    # Filter out issues with "claimed" label to avoid duplicate processing
+    all_issues = list(repo.get_issues(state="open"))
+    issues = [issue for issue in all_issues if "claimed" not in [label.name for label in issue.labels]]
 
     if not issues:
         print("No open issues found. Waiting for new issues...")
@@ -74,6 +76,9 @@ while True:
     # Process the latest unprocessed issue
     issue = unprocessed_issues[0]
     print(f"Working on #{issue.number}: {issue.title}")
+
+    # Add "claimed" label to prevent duplicate processing
+    issue.add_to_labels("claimed")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Prevent git from trying GUI/interactive credential prompts
