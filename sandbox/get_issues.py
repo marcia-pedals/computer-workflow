@@ -46,7 +46,26 @@ token = get_token()
 g = Github(auth=Auth.Token(token))
 
 repo = g.get_repo(REPO)
-processed_issues = set()
+
+# Track processed issues persistently to avoid reprocessing after restarts
+STATE_FILE = SCRIPT_DIR / ".processed_issues.json"
+
+def load_processed_issues() -> set:
+    """Load the set of processed issue numbers from disk."""
+    if STATE_FILE.exists():
+        try:
+            data = json.loads(STATE_FILE.read_text())
+            return set(data.get("processed_issues", []))
+        except (json.JSONDecodeError, KeyError):
+            return set()
+    return set()
+
+def save_processed_issues(processed: set) -> None:
+    """Save the set of processed issue numbers to disk."""
+    STATE_FILE.write_text(json.dumps({"processed_issues": list(processed)}, indent=2))
+
+processed_issues = load_processed_issues()
+print(f"Loaded {len(processed_issues)} previously processed issue(s)")
 
 print("Starting issue polling loop...")
 
@@ -152,6 +171,7 @@ while True:
 
         # Mark this issue as processed regardless of success/failure
         processed_issues.add(issue.number)
+        save_processed_issues(processed_issues)
 
         if proc.returncode == 0:
             print(f"Successfully processed issue #{issue.number}")

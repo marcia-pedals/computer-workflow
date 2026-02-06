@@ -211,3 +211,6 @@ __marimo__/
 
 # Environment configs (contains secrets)
 environments/
+
+# Runtime state files
+.processed_issues.json
