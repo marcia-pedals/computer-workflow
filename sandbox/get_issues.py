@@ -53,6 +53,35 @@ def claim_issue(issue):
     issue.add_to_labels("claimed")
     print(f"Added 'claimed' label to issue #{issue.number}")
 
+def unclaim_issue(issue):
+    """Remove the 'claimed' label from an issue."""
+    try:
+        issue.remove_from_labels("claimed")
+        print(f"Removed 'claimed' label from issue #{issue.number}")
+    except Exception as e:
+        print(f"Warning: Could not remove 'claimed' label from issue #{issue.number}: {e}")
+
+def re_request_reviews(issue):
+    """Re-request reviews from all reviewers who previously reviewed the PR."""
+    if issue.pull_request is None:
+        return  # Not a PR, nothing to do
+
+    try:
+        pr = repo.get_pull(issue.number)
+        reviewers = set()
+
+        # Collect all users who have reviewed this PR
+        for review in pr.get_reviews():
+            if review.user.login != pr.user.login:  # Don't request review from PR author
+                reviewers.add(review.user.login)
+
+        if reviewers:
+            # Re-request reviews from all reviewers
+            pr.create_review_request(reviewers=list(reviewers))
+            print(f"Re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
+    except Exception as e:
+        print(f"Warning: Could not re-request reviews on PR #{issue.number}: {e}")
+
 def parse_and_display_stream_line(line):
     """Parse a JSON stream line and display relevant information."""
     try:
@@ -176,6 +205,9 @@ def process_issue(issue):
 
         if proc.returncode == 0:
             print(f"\n✅ Successfully processed issue #{issue.number}")
+            # After successful processing, remove claimed label and re-request reviews
+            unclaim_issue(issue)
+            re_request_reviews(issue)
         else:
             print(f"\n❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})")
 
