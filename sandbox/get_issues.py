@@ -154,10 +154,11 @@ def get_unprocessed_issue():
     if not issues:
         return None
 
-    # Filter out issues that are already claimed
+    # Filter out PRs and issues that are already claimed
     unprocessed = [
         i for i in issues
-        if not any(label.name == "claimed" for label in i.labels)
+        if i.pull_request is None  # Filter out PRs
+        and not any(label.name == "claimed" for label in i.labels)
     ]
     return unprocessed[0] if unprocessed else None
 
