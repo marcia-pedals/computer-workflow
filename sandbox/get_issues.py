@@ -182,6 +182,46 @@ def process_issue(issue, reason="issue", task_num=None):
             check=True,
         )
 
+        # If processing a PR, checkout the PR branch
+        if issue.pull_request is not None:
+            pr = repo.get_pull(issue.number)
+            pr_branch = pr.head.ref
+            pr_repo = pr.head.repo.full_name if pr.head.repo else REPO
+
+            # If PR is from a fork, add the fork as a remote and fetch
+            if pr_repo != REPO:
+                subprocess.run(
+                    ["git", "remote", "add", "pr-fork", f"https://github.com/{pr_repo}.git"],
+                    cwd=tmpdir,
+                    check=True,
+                    env=clone_env,
+                )
+                subprocess.run(
+                    ["git", "fetch", "pr-fork", pr_branch],
+                    cwd=tmpdir,
+                    check=True,
+                    env=clone_env,
+                )
+                subprocess.run(
+                    ["git", "checkout", "-b", pr_branch, f"pr-fork/{pr_branch}"],
+                    cwd=tmpdir,
+                    check=True,
+                )
+            else:
+                # PR is from the same repo, just fetch and checkout
+                subprocess.run(
+                    ["git", "fetch", "origin", pr_branch],
+                    cwd=tmpdir,
+                    check=True,
+                    env=clone_env,
+                )
+                subprocess.run(
+                    ["git", "checkout", "-b", pr_branch, f"origin/{pr_branch}"],
+                    cwd=tmpdir,
+                    check=True,
+                )
+            print(f"{prefix}Checked out PR branch: {pr_branch}")
+
         if args.test_prompt:
           if issue.pull_request is None:
             prompt = f"Make a dummy pull request for issue #{issue.number} for testing purposes. Keep changes minimal."
