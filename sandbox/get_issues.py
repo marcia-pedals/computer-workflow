@@ -109,10 +109,8 @@ def process_issue(issue):
             [
                 "claude",
                 "--print",
-                # "--output-format", "stream-json",
-                # "--verbose",
+                "--output-format", "stream-json",
                 "--dangerously-skip-permissions",
-                # "--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep",
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
