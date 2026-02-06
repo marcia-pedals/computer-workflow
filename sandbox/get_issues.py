@@ -87,7 +87,7 @@ def re_request_reviews(issue, task_num=None):
         pr.create_review_request(reviewers=list(reviewers))
         print(f"{prefix}Dismissed stale reviews and re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
 
-def parse_and_display_stream_line(line, task_num=None):
+def parse_and_display_stream_line(line, task_num=None, output_buffer=None):
     """Parse a JSON stream line and display relevant information."""
     prefix = f"[{task_num}] " if task_num is not None else ""
     try:
@@ -99,15 +99,23 @@ def parse_and_display_stream_line(line, task_num=None):
             if "newTodos" in result:
                 new_todos = result["newTodos"]
                 if new_todos:
-                    print(f"\n{prefix}📋 Todo List Updated:")
+                    msg = f"\n{prefix}📋 Todo List Updated:"
+                    print(msg)
+                    if output_buffer is not None:
+                        output_buffer.append(msg)
                     for todo in new_todos:
                         status_icon = {
                             "in_progress": "🔄",
                             "completed": "✅",
                             "pending": "⏳"
                         }.get(todo["status"], "•")
-                        print(f"{prefix}  {status_icon} {todo['content']} ({todo['status']})")
+                        todo_msg = f"{prefix}  {status_icon} {todo['content']} ({todo['status']})"
+                        print(todo_msg)
+                        if output_buffer is not None:
+                            output_buffer.append(todo_msg)
                     print()
+                    if output_buffer is not None:
+                        output_buffer.append("")
 
         # Handle assistant text messages (but filter out tool-related ones)
         elif data.get("type") == "assistant":
@@ -118,7 +126,10 @@ def parse_and_display_stream_line(line, task_num=None):
                     text = item.get("text", "").strip()
                     # Only print if it's not empty
                     if text:
-                        print(f"{prefix}💬 {text}")
+                        msg = f"{prefix}💬 {text}"
+                        print(msg)
+                        if output_buffer is not None:
+                            output_buffer.append(msg)
 
     except json.JSONDecodeError:
         # If it's not valid JSON, just pass it through
@@ -170,18 +181,14 @@ def process_issue(issue, task_num=None):
               f"Make a pull request resolving issue #{issue.number}.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}\n\n" +
-              "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
-              "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
             )
           else:
             prompt = (
               f"Update #{issue.number} to address the latest review.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}\n\n" +
-              "If you can't accomplish the task or can't test your work, add a comment to the PR explaining why.\n\n" +
-              "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}" +
             )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
@@ -212,13 +219,22 @@ def process_issue(issue, task_num=None):
         proc.stdin.write(prompt)
         proc.stdin.close()
 
+        # Capture output for posting as a comment
+        output_buffer = []
         for line in proc.stdout:
-            parse_and_display_stream_line(line, task_num)
+            parse_and_display_stream_line(line, task_num, output_buffer)
 
         proc.wait()
 
         if proc.returncode == 0:
             print(f"\n{prefix}✅ Successfully processed issue #{issue.number}")
+
+            # Post captured output as a comment
+            if output_buffer:
+                comment_body = "\n".join(output_buffer)
+                issue.create_comment(comment_body)
+                print(f"{prefix}Posted processing output as comment on #{issue.number}")
+
             # After successful processing, remove claimed label and re-request reviews
             unclaim_issue(issue, task_num)
             re_request_reviews(issue, task_num)
