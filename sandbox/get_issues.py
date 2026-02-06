@@ -66,23 +66,26 @@ def unclaim_issue(issue, task_num=None):
     print(f"{prefix}Removed 'claimed' label from PR #{issue.number}")
 
 def re_request_reviews(issue, task_num=None):
-    """Re-request reviews from all reviewers who previously reviewed the PR."""
+    """Dismiss CHANGES_REQUESTED reviews and re-request reviews from all reviewers."""
     if issue.pull_request is None:
         return  # Not a PR, nothing to do
 
     pr = repo.get_pull(issue.number)
     reviewers = set()
 
-    # Collect all users who have reviewed this PR
+    # Dismiss CHANGES_REQUESTED reviews so the PR isn't picked up again,
+    # and collect reviewers to re-request.
     for review in pr.get_reviews():
-        if review.user.login != pr.user.login:  # Don't request review from PR author
-            reviewers.add(review.user.login)
+        if review.user.login == pr.user.login:
+            continue
+        reviewers.add(review.user.login)
+        if review.state == "CHANGES_REQUESTED":
+            review.dismiss("Changes have been addressed.")
 
+    prefix = f"[{task_num}] " if task_num is not None else ""
     if reviewers:
-        # Re-request reviews from all reviewers
         pr.create_review_request(reviewers=list(reviewers))
-        prefix = f"[{task_num}] " if task_num is not None else ""
-        print(f"{prefix}Re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
+        print(f"{prefix}Dismissed stale reviews and re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
 
 def parse_and_display_stream_line(line, task_num=None):
     """Parse a JSON stream line and display relevant information."""
@@ -229,6 +232,7 @@ def _pr_has_unaddressed_review_comments(repo, pr_number):
     for review in pr.get_reviews():
         if review.state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
             latest_by_author[review.user.login] = review.state
+    print(repo, pr_number, latest_by_author)
     return "CHANGES_REQUESTED" in latest_by_author.values()
 
 
