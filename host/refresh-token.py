@@ -15,7 +15,7 @@ SSH_OPTS = [
     "-o", "StrictHostKeyChecking=no",
     "-o", "UserKnownHostsFile=/dev/null",
     "-o", "LogLevel=ERROR",
-    "-o", "PubkeyAuthentication=no",
+    "-o", "PreferredAuthentications=password",
 ]
 
 

@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# --- Prevent concurrent runs ---
+LOCKDIR="/tmp/computer-workflow-sandbox.lock"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  echo "ERROR: Another instance of run-sandbox.sh is already running (lock: $LOCKDIR)."
+  echo "If this is stale, remove it with: rmdir $LOCKDIR"
+  exit 1
+fi
+
 if [[ $# -ne 1 ]]; then
   echo "Usage: $0 <environment.json>"
   exit 1
@@ -35,6 +43,7 @@ cleanup() {
   echo "Cleaning up..."
   [[ -n "${REFRESH_PID:-}" ]] && kill "$REFRESH_PID" 2>/dev/null || true
   tart stop "$VM_NAME" 2>/dev/null || true
+  rmdir "$LOCKDIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -56,7 +65,7 @@ if [[ -z "$VM_IP" ]]; then
   exit 1
 fi
 
-SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o PubkeyAuthentication=no -o ConnectTimeout=3)
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o PreferredAuthentications=password -o ConnectTimeout=3)
 export SSHPASS=admin
 
 for i in $(seq 1 30); do

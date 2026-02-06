@@ -10,6 +10,7 @@ done
 
 # --- Environment ---
 source "$HOME/.zprofile"
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 export PYTHONUNBUFFERED=1
 
 # --- Set Claude Code auth ---
