@@ -164,12 +164,13 @@ def process_issue(issue, task_num=None):
           else:
             prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
+          token_path = os.path.expanduser("~/.github-app-token")
           if issue.pull_request is None:
             prompt = (
               f"Make a pull request resolving issue #{issue.number}.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path $HOME/.github-app-token\n\n" +
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}\n\n" +
               "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
               "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
             )
@@ -178,7 +179,7 @@ def process_issue(issue, task_num=None):
               f"Update #{issue.number} to address the latest review.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path $HOME/.github-app-token\n\n" +
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}\n\n" +
               "If you can't accomplish the task or can't test your work, add a comment to the PR explaining why.\n\n" +
               "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
             )
