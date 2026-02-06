@@ -5,16 +5,14 @@ HOST_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$HOST_DIR/.." && pwd)"
 SANDBOX_DIR="$REPO_DIR/sandbox"
 VM_NAME="computer-workflow-sandbox"
+BASE_IMAGE="ghcr.io/cirruslabs/macos-sequoia-base:latest"
 
-# --- Cleanup trap: stop the VM on exit ---
-cleanup() {
-  echo "Cleaning up..."
-  [[ -n "${REFRESH_PID:-}" ]] && kill "$REFRESH_PID" 2>/dev/null || true
-  tart stop "$VM_NAME" 2>/dev/null || true
-}
-trap cleanup EXIT
+# --- Create a fresh VM ---
+echo "Cloning base image..."
+tart delete "$VM_NAME" 2>/dev/null || true
+tart clone "$BASE_IMAGE" "$VM_NAME"
 
-# --- Start pre-built VM ---
+# --- Start VM ---
 echo "Starting VM..."
 tart run "$VM_NAME" --net-softnet --no-graphics &
 
@@ -47,17 +45,11 @@ echo "Copying files into VM..."
 sshpass -e scp -r "${SSH_OPTS[@]}" "$SANDBOX_DIR" "admin@$VM_IP:computer-workflow"
 sshpass -e scp "${SSH_OPTS[@]}" "$REPO_DIR/flake.nix" "$REPO_DIR/flake.lock" "admin@$VM_IP:computer-workflow/"
 
-# --- Push Claude Code OAuth token ---
-echo "Pushing Claude Code token..."
-CLAUDE_TOKEN=$(cat ~/personal-projects/.secrets/claude-sub)
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "echo '$CLAUDE_TOKEN' > ~/.claude-oauth-token"
-echo "Claude token pushed."
+# --- Run the build script inside the VM ---
+echo "Running sandbox-build-inner.sh inside VM..."
+sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "bash computer-workflow/sandbox-build-inner.sh"
 
-# --- Push initial token and start refresh loop ---
-PRIVATE_KEY=~/personal-projects/.secrets/clever-computer.2026-02-05.private-key.pem
-python3 "$HOST_DIR/refresh-token.py" --continuous "$PRIVATE_KEY" "$VM_IP" &
-REFRESH_PID=$!
-
-# --- Run the inner script ---
-echo "Running sandbox-inner.sh inside VM..."
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "bash computer-workflow/sandbox-inner.sh"
+# --- Stop VM (preserve for future runs) ---
+echo "Stopping VM..."
+tart stop "$VM_NAME" 2>/dev/null || true
+echo "Build complete. VM '$VM_NAME' is ready for use with run-sandbox.sh."

@@ -1,20 +1,46 @@
+import argparse
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
 from github import Auth, Github
 
 REPO = "marcia-pedals/computer-workflow"
-TOKEN_PATH = Path.home() / ".github-app-token"
 SCRIPT_DIR = Path(__file__).parent
 CREDENTIAL_HELPER = SCRIPT_DIR / "git-credential-app.py"
 BIN_DIR = str(SCRIPT_DIR / "bin")
 POLL_INTERVAL = 15
 
-token = TOKEN_PATH.read_text().strip()
+APP_ID = 2810181
+INSTALLATION_ID = 108446080
+
+parser = argparse.ArgumentParser(description="Poll GitHub issues and process them with Claude")
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument("--token-path", help="Path to a file containing a GitHub token")
+group.add_argument("--secret-key-path", help="Path to the GitHub App private key PEM file")
+args = parser.parse_args()
+
+if args.token_path:
+    token_path = Path(args.token_path)
+else:
+    # Generate token from app key; write to a temp file for gh-wrapper
+    token_path = Path(tempfile.mktemp(suffix=".token"))
+    key = Path(args.secret_key_path).read_text()
+    app_auth = Auth.AppInstallationAuth(Auth.AppAuth(APP_ID, key), INSTALLATION_ID)
+
+
+def get_token() -> str:
+    """Return a fresh token, updating the token file if in secret-key mode."""
+    if args.token_path:
+        return token_path.read_text().strip()
+    tok = Github(auth=app_auth).requester.auth.token
+    token_path.write_text(tok)
+    return tok
+
+
+token = get_token()
 g = Github(auth=Auth.Token(token))
 
 repo = g.get_repo(REPO)
@@ -23,8 +49,8 @@ processed_issues = set()
 print("Starting issue polling loop...")
 
 while True:
-    # Refresh token in case it has been updated
-    token = TOKEN_PATH.read_text().strip()
+    # Refresh token in case it has been updated / regenerate if using secret key
+    token = get_token()
     g = Github(auth=Auth.Token(token))
     repo = g.get_repo(REPO)
 
@@ -86,6 +112,7 @@ while True:
             **os.environ,
             "PATH": f"{BIN_DIR}:{os.environ.get('PATH', '')}",
             "GIT_TERMINAL_PROMPT": "0",
+            "CW_GITHUB_TOKEN_PATH": str(token_path),
         }
 
         proc = subprocess.Popen(

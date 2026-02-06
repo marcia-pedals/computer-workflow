@@ -2,9 +2,9 @@
 """Runs on the host. Periodically generates a fresh GitHub App installation
 token and pushes it into the sandbox VM via scp."""
 
+import argparse
 import os
 import subprocess
-import sys
 import time
 
 from github_app_token import get_token
@@ -19,8 +19,8 @@ SSH_OPTS = [
 ]
 
 
-def push_token(vm_ip: str):
-    token = get_token()
+def push_token(private_key: str, vm_ip: str):
+    token = get_token(private_key)
     subprocess.run(
         ["sshpass", "-e", "ssh", *SSH_OPTS, f"admin@{vm_ip}",
          f"echo '{token}' > ~/.github-app-token"],
@@ -31,19 +31,23 @@ def push_token(vm_ip: str):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <vm-ip>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Push GitHub App token to sandbox VM")
+    parser.add_argument("private_key", help="Path to the GitHub App private key PEM file")
+    parser.add_argument("vm_ip", help="IP address of the sandbox VM")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--once", action="store_true", help="Push token once and exit")
+    group.add_argument("--continuous", action="store_true", help="Push token and keep refreshing")
+    args = parser.parse_args()
 
-    vm_ip = sys.argv[1]
+    push_token(args.private_key, args.vm_ip)
 
-    # Initial token is pushed by run-sandbox.sh, so sleep first
-    while True:
-        time.sleep(REFRESH_INTERVAL)
-        try:
-            push_token(vm_ip)
-        except Exception as e:
-            print(f"Error pushing token: {e}")
+    if args.continuous:
+        while True:
+            time.sleep(REFRESH_INTERVAL)
+            try:
+                push_token(args.private_key, args.vm_ip)
+            except Exception as e:
+                print(f"Error pushing token: {e}")
 
 
 if __name__ == "__main__":

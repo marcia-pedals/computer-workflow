@@ -6,7 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 
-TOKEN_PATH = Path.home() / ".github-app-token"
+TOKEN_PATH = Path(os.environ["CW_GITHUB_TOKEN_PATH"])
 
 # Find the real gh, skipping this wrapper's directory
 this_dir = str(Path(__file__).resolve().parent)
