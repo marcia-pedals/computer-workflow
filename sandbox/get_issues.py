@@ -14,6 +14,13 @@ BIN_DIR = str(SCRIPT_DIR / "bin")
 POLL_INTERVAL = 15
 MAX_WORKERS = 5
 
+# Template for test instructions appended to prompts
+TEST_INSTRUCTIONS = (
+    "\n\nIf appropriate, test your changes in marcia-pedals/clever-computer-test by: "
+    "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py "
+    "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path {token_path}"
+)
+
 APP_ID = 2810181
 INSTALLATION_ID = 108446080
 
@@ -88,7 +95,7 @@ def re_request_reviews(issue, task_num=None):
         pr.create_review_request(reviewers=list(reviewers))
         print(f"{prefix}Dismissed stale reviews and re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
 
-def parse_and_display_stream_line(line, task_num=None):
+def parse_and_display_stream_line(line, task_num=None, output_buffer=None):
     """Parse a JSON stream line and display relevant information."""
     prefix = f"[{task_num}] " if task_num is not None else ""
     try:
@@ -100,15 +107,23 @@ def parse_and_display_stream_line(line, task_num=None):
             if "newTodos" in result:
                 new_todos = result["newTodos"]
                 if new_todos:
-                    print(f"\n{prefix}📋 Todo List Updated:")
+                    msg = f"\n{prefix}📋 Todo List Updated:"
+                    print(msg)
+                    if output_buffer is not None:
+                        output_buffer.append(msg)
                     for todo in new_todos:
                         status_icon = {
                             "in_progress": "🔄",
                             "completed": "✅",
                             "pending": "⏳"
                         }.get(todo["status"], "•")
-                        print(f"{prefix}  {status_icon} {todo['content']} ({todo['status']})")
+                        todo_msg = f"{prefix}  {status_icon} {todo['content']} ({todo['status']})"
+                        print(todo_msg)
+                        if output_buffer is not None:
+                            output_buffer.append(todo_msg)
                     print()
+                    if output_buffer is not None:
+                        output_buffer.append("")
 
         # Handle assistant text messages (but filter out tool-related ones)
         elif data.get("type") == "assistant":
@@ -119,14 +134,23 @@ def parse_and_display_stream_line(line, task_num=None):
                     text = item.get("text", "").strip()
                     # Only print if it's not empty
                     if text:
-                        print(f"{prefix}💬 {text}")
+                        msg = f"{prefix}💬 {text}"
+                        print(msg)
+                        if output_buffer is not None:
+                            output_buffer.append(msg)
 
     except json.JSONDecodeError:
         # If it's not valid JSON, just pass it through
         pass
 
-def process_issue(issue, task_num=None):
-    """Clone the repo, run Claude Code on the issue, return True on success."""
+def process_issue(issue, reason="issue", task_num=None):
+    """Clone the repo, run Claude Code on the issue, return True on success.
+
+    Args:
+        issue: The GitHub issue or PR to process
+        reason: One of "issue", "review_comments", or "merge_conflict"
+        task_num: Optional task number for logging in parallel mode
+    """
     token = get_token()
     prefix = f"[{task_num}] " if task_num is not None else ""
     print(f"{prefix}Working on #{issue.number}: {issue.title}")
@@ -165,24 +189,18 @@ def process_issue(issue, task_num=None):
           else:
             prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
-          if issue.pull_request is None:
-            prompt = (
-              f"Make a pull request resolving issue #{issue.number}.\n\n" +
-              "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
-              "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path $HOME/.github-app-token\n\n" +
-              "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
-              "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
-            )
+          token_path = os.path.expanduser("~/.github-app-token")
+          test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path)
+
+          if reason == "issue":
+            prompt = f"Make a pull request resolving issue #{issue.number}." + test_instructions
+          elif reason == "review_comments":
+            prompt = f"Update #{issue.number} to address the latest review." + test_instructions
+          elif reason == "merge_conflict":
+            prompt = f"Resolve conflicts with base in #{issue.number}." + test_instructions
           else:
-            prompt = (
-              f"Update #{issue.number} to address the latest review.\n\n" +
-              "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
-              "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path $HOME/.github-app-token\n\n" +
-              "If you can't accomplish the task or can't test your work, add a comment to the PR explaining why.\n\n" +
-              "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
-            )
+            # Fallback for unknown reason
+            prompt = f"Update #{issue.number}." + test_instructions
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
         # Disable interactive git prompts in case macOS keychain dialog triggers.
@@ -212,13 +230,22 @@ def process_issue(issue, task_num=None):
         proc.stdin.write(prompt)
         proc.stdin.close()
 
+        # Capture output for posting as a comment
+        output_buffer = []
         for line in proc.stdout:
-            parse_and_display_stream_line(line, task_num)
+            parse_and_display_stream_line(line, task_num, output_buffer)
 
         proc.wait()
 
         if proc.returncode == 0:
             print(f"\n{prefix}✅ Successfully processed issue #{issue.number}")
+
+            # Post captured output as a comment
+            if output_buffer:
+                comment_body = "\n".join(output_buffer)
+                issue.create_comment(comment_body)
+                print(f"{prefix}Posted processing output as comment on #{issue.number}")
+
             # After successful processing, remove claimed label and re-request reviews
             unclaim_issue(issue, task_num)
             re_request_reviews(issue, task_num)
@@ -233,29 +260,44 @@ def _pr_has_unaddressed_review_comments(repo, pr_number):
     for review in pr.get_reviews():
         if review.state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
             latest_by_author[review.user.login] = review.state
-    print(repo, pr_number, latest_by_author)
     return "CHANGES_REQUESTED" in latest_by_author.values()
 
 
+def _pr_has_merge_conflicts(repo, pr_number):
+    """Return True if the PR has merge conflicts with its base branch."""
+    pr = repo.get_pull(pr_number)
+    return pr.mergeable is False
+
+
 def get_unprocessed_issue():
-    """Fetch the oldest open unclaimed issue or PR with unaddressed review comments, or None."""
+    """Fetch the oldest open unclaimed issue or PR with unaddressed review comments or merge conflicts.
+
+    Returns:
+        Tuple of (issue, reason) where reason is one of:
+        - "issue": Regular issue (not a PR)
+        - "review_comments": PR with unaddressed review comments
+        - "merge_conflict": PR with merge conflicts
+        Returns (None, None) if no unprocessed issues found.
+    """
     token = get_token()
     g = Github(auth=Auth.Token(token))
     repo = g.get_repo(REPO)
     issues = list(repo.get_issues(state="open"))
 
     if not issues:
-        return None
+        return None, None
 
     for i in reversed(issues):
         if any(label.name == "claimed" for label in i.labels):
             continue
         if i.pull_request is None:
-            return i
+            return i, "issue"
         if _pr_has_unaddressed_review_comments(repo, i.number):
-            return i
+            return i, "review_comments"
+        if _pr_has_merge_conflicts(repo, i.number):
+            return i, "merge_conflict"
 
-    return None
+    return None, None
 
 
 if args.poll:
@@ -274,12 +316,12 @@ if args.poll:
 
             # If we have capacity, try to get a new issue
             if len(active_tasks) < MAX_WORKERS:
-                issue = get_unprocessed_issue()
+                issue, reason = get_unprocessed_issue()
                 if issue is not None:
                     task_num = next_task_num
                     next_task_num += 1
                     print(f"[{task_num}] Assigning issue #{issue.number} to task {task_num}")
-                    future = executor.submit(process_issue, issue, task_num)
+                    future = executor.submit(process_issue, issue, reason, task_num)
                     active_tasks.append((future, issue.number, task_num))
                 elif len(active_tasks) == 0:
                     # No issues and no active workers
@@ -305,11 +347,20 @@ else:
     if args.process_issue:
         # Process a specific issue by number
         issue = repo.get_issue(args.process_issue)
-        process_issue(issue)
+        # Determine the reason based on issue state
+        if issue.pull_request is None:
+            reason = "issue"
+        elif _pr_has_unaddressed_review_comments(repo, issue.number):
+            reason = "review_comments"
+        elif _pr_has_merge_conflicts(repo, issue.number):
+            reason = "merge_conflict"
+        else:
+            reason = "issue"  # Default to issue for PRs without special conditions
+        process_issue(issue, reason)
     else:
         # Find and process the next unprocessed issue
-        issue = get_unprocessed_issue()
+        issue, reason = get_unprocessed_issue()
         if issue is None:
             print("No unprocessed open issues found.")
         else:
-            process_issue(issue)
+            process_issue(issue, reason)
