@@ -17,4 +17,4 @@ export CLAUDE_CODE_OAUTH_TOKEN=$(cat ~/.claude-oauth-token)
 
 # --- Run ---
 cd $HOME/computer-workflow
-nix develop .#sandbox --command python3 get_issues.py --token-path "$HOME/.github-app-token"
+nix develop .#sandbox --command python3 get_issues.py --repo "$TARGET_REPO" --token-path "$HOME/.github-app-token"

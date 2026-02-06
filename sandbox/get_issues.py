@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 from github import Auth, Github
 
-REPO = "marcia-pedals/computer-workflow"
 SCRIPT_DIR = Path(__file__).parent
 CREDENTIAL_HELPER = SCRIPT_DIR / "git-credential-app.py"
 BIN_DIR = str(SCRIPT_DIR / "bin")
@@ -17,10 +16,13 @@ APP_ID = 2810181
 INSTALLATION_ID = 108446080
 
 parser = argparse.ArgumentParser(description="Poll GitHub issues and process them with Claude")
+parser.add_argument("--repo", required=True, help="Target GitHub repo (owner/name)")
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--token-path", help="Path to a file containing a GitHub token")
 group.add_argument("--secret-key-path", help="Path to the GitHub App private key PEM file")
 args = parser.parse_args()
+
+REPO = args.repo
 
 if args.token_path:
     token_path = Path(args.token_path)

@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <environment.json>"
+  exit 1
+fi
+
+ENV_FILE="$1"
+
+# --- Parse environment config ---
+read_config() {
+  python3 -c "
+import json, sys, os
+val = json.load(open(sys.argv[1]))[sys.argv[2]]
+if isinstance(val, str):
+    print(os.path.expanduser(val))
+else:
+    print(val)
+" "$ENV_FILE" "$1"
+}
+
+APP_ID=$(read_config app_id)
+INSTALLATION_ID=$(read_config installation_id)
+PRIVATE_KEY=$(read_config app_private_key_path)
+TARGET_REPO=$(read_config target_repo)
+
 HOST_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$HOST_DIR/.." && pwd)"
 SANDBOX_DIR="$REPO_DIR/sandbox"
@@ -42,10 +66,25 @@ done
 
 echo "VM is SSH-reachable."
 
+# --- Clean previous state ---
+sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "rm -rf ~/computer-workflow ~/environment"
+
 # --- Copy project files into the VM ---
 echo "Copying files into VM..."
 sshpass -e scp -r "${SSH_OPTS[@]}" "$SANDBOX_DIR" "admin@$VM_IP:computer-workflow"
 sshpass -e scp "${SSH_OPTS[@]}" "$REPO_DIR/flake.nix" "$REPO_DIR/flake.lock" "admin@$VM_IP:computer-workflow/"
+
+# --- Copy test environment files into the VM ---
+sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "mkdir -p ~/environment"
+python3 -c "
+import json, sys
+for p in json.load(open(sys.argv[1])).get('test_environment', []):
+    print(p)
+" "$ENV_FILE" | while read -r filepath; do
+  expanded=$(python3 -c "import os,sys; print(os.path.expanduser(sys.argv[1]))" "$filepath")
+  echo "Copying test env file: $expanded"
+  sshpass -e scp "${SSH_OPTS[@]}" "$expanded" "admin@$VM_IP:environment/"
+done
 
 # --- Push Claude Code OAuth token ---
 echo "Pushing Claude Code token..."
@@ -54,10 +93,9 @@ sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "echo '$CLAUDE_TOKEN' > ~/.claude
 echo "Claude token pushed."
 
 # --- Push initial token and start refresh loop ---
-PRIVATE_KEY=~/personal-projects/.secrets/clever-computer.2026-02-05.private-key.pem
-python3 "$HOST_DIR/refresh-token.py" --continuous "$PRIVATE_KEY" "$VM_IP" &
+python3 "$HOST_DIR/refresh-token.py" --app-id "$APP_ID" --installation-id "$INSTALLATION_ID" --continuous "$PRIVATE_KEY" "$VM_IP" &
 REFRESH_PID=$!
 
 # --- Run the inner script ---
 echo "Running sandbox-inner.sh inside VM..."
-sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "bash computer-workflow/sandbox-inner.sh"
+sshpass -e ssh "${SSH_OPTS[@]}" "admin@$VM_IP" "TARGET_REPO='$TARGET_REPO' bash computer-workflow/sandbox-inner.sh"
