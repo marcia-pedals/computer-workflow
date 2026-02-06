@@ -183,14 +183,16 @@ def process_issue(issue, reason="issue", task_num=None):
             check=True,
         )
 
+        # Set token_path for use in environment variable
+        token_path_str = os.path.expanduser("~/.github-app-token")
+
         if args.test_prompt:
           if issue.pull_request is None:
             prompt = f"Make a dummy pull request for issue #{issue.number} for testing purposes. Keep changes minimal."
           else:
             prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
-          token_path = os.path.expanduser("~/.github-app-token")
-          test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path)
+          test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path_str)
 
           if reason == "issue":
             prompt = f"Make a pull request resolving issue #{issue.number}." + test_instructions
@@ -208,7 +210,7 @@ def process_issue(issue, reason="issue", task_num=None):
             **os.environ,
             "PATH": f"{BIN_DIR}:{os.environ.get('PATH', '')}",
             "GIT_TERMINAL_PROMPT": "0",
-            "CW_GITHUB_TOKEN_PATH": str(token_path),
+            "CW_GITHUB_TOKEN_PATH": token_path_str,
         }
 
         proc = subprocess.Popen(
