@@ -37,7 +37,7 @@ export SSHPASS=admin
 ssh_retry() {
   local max_retries=5
   for i in $(seq 1 "$max_retries"); do
-    if "$@" 2>/dev/null; then return 0; fi
+    if "$@"; then return 0; fi
     echo "  retry $i/$max_retries..."
     sleep 3
   done

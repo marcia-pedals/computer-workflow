@@ -188,7 +188,7 @@ def process_issue(issue, task_num=None):
               f"Update #{issue.number} to address the latest review.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}" +
+              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
             )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
