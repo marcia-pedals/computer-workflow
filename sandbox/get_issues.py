@@ -85,6 +85,8 @@ def process_issue(issue):
           "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
           "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
           "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
+          "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
+          "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
         )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
