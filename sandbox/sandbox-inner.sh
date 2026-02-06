@@ -37,4 +37,4 @@ export CLAUDE_CODE_OAUTH_TOKEN=$(cat ~/.claude-oauth-token)
 
 # --- Run ---
 cd /tmp/computer-workflow
-nix develop .#sandbox --command python3 get_issues.py
+nix develop .#sandbox --command bash run_all_pollers.sh
