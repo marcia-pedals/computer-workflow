@@ -122,15 +122,24 @@ def process_issue(issue):
             check=True,
         )
 
-        # Run Claude Code headless
-        prompt = (
-          f"Make a pull request resolving issue #{issue.number}.\n\n" +
-          "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
-          "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-          "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
-          "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
-          "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
-        )
+        if issue.pull_request is None:
+          prompt = (
+            f"Make a pull request resolving issue #{issue.number}.\n\n" +
+            "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
+            "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
+            "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
+            "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
+            "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
+          )
+        else:
+          prompt = (
+            f"Update #{issue.number} to address the latest review.\n\n" +
+            "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
+            "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
+            "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
+            "If you can't accomplish the task or can't test your work, add a comment to the PR explaining why.\n\n" +
+            "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
+          )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
         # Disable interactive git prompts in case macOS keychain dialog triggers.
@@ -171,8 +180,18 @@ def process_issue(issue):
             print(f"\n❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})")
 
 
+def _pr_has_unaddressed_review_comments(repo, pr_number):
+    """Return True if the PR has at least one reviewer whose latest review requests changes."""
+    pr = repo.get_pull(pr_number)
+    latest_by_author = {}
+    for review in pr.get_reviews():
+        if review.state in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+            latest_by_author[review.user.login] = review.state
+    return "CHANGES_REQUESTED" in latest_by_author.values()
+
+
 def get_unprocessed_issue():
-    """Fetch open issues and return the first unprocessed one, or None."""
+    """Fetch the oldest open unclaimed issue or PR with unaddressed review comments, or None."""
     token = get_token()
     g = Github(auth=Auth.Token(token))
     repo = g.get_repo(REPO)
@@ -181,13 +200,15 @@ def get_unprocessed_issue():
     if not issues:
         return None
 
-    # Filter out PRs and issues that are already claimed
-    unprocessed = [
-        i for i in issues
-        if i.pull_request is None  # Filter out PRs
-        and not any(label.name == "claimed" for label in i.labels)
-    ]
-    return unprocessed[-1] if unprocessed else None
+    for i in reversed(issues):
+        if any(label.name == "claimed" for label in i.labels):
+            continue
+        if i.pull_request is None:
+            return i
+        if _pr_has_unaddressed_review_comments(repo, i.number):
+            return i
+
+    return None
 
 
 if args.poll:
