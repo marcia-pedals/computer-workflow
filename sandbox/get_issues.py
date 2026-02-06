@@ -134,7 +134,7 @@ def process_issue(issue):
               f"Make a pull request resolving issue #{issue.number}.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
+              "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path $HOME/.github-app-token\n\n" +
               "If you can't accomplish the task or can't test your work, add a comment to the issue explaining instead of making a PR.\n\n" +
               "If you do succeed, also add a comment to the issue explaining what you did any any issues you ran into along the way."
             )
@@ -143,7 +143,7 @@ def process_issue(issue):
               f"Update #{issue.number} to address the latest review.\n\n" +
               "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
               "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
+              "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path $HOME/.github-app-token\n\n" +
               "If you can't accomplish the task or can't test your work, add a comment to the PR explaining why.\n\n" +
               "If you do succeed, also add a comment to the PR explaining what you did any any issues you ran into along the way."
             )
