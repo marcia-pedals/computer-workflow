@@ -184,12 +184,21 @@ def process_issue(issue, task_num=None):
               f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
             )
           else:
-            prompt = (
-              f"Update #{issue.number} to address the latest review.\n\n" +
-              "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
-              "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
-              f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
-            )
+            # Check if PR has merge conflicts
+            if _pr_has_merge_conflicts(repo, issue.number):
+              prompt = (
+                f"Resolve conflicts with base in #{issue.number}.\n\n" +
+                "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
+                "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
+                f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
+              )
+            else:
+              prompt = (
+                f"Update #{issue.number} to address the latest review.\n\n" +
+                "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
+                "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
+                f"with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
+              )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
         # Disable interactive git prompts in case macOS keychain dialog triggers.
@@ -252,8 +261,14 @@ def _pr_has_unaddressed_review_comments(repo, pr_number):
     return "CHANGES_REQUESTED" in latest_by_author.values()
 
 
+def _pr_has_merge_conflicts(repo, pr_number):
+    """Return True if the PR has merge conflicts with its base branch."""
+    pr = repo.get_pull(pr_number)
+    return pr.mergeable is False
+
+
 def get_unprocessed_issue():
-    """Fetch the oldest open unclaimed issue or PR with unaddressed review comments, or None."""
+    """Fetch the oldest open unclaimed issue or PR with unaddressed review comments or merge conflicts, or None."""
     token = get_token()
     g = Github(auth=Auth.Token(token))
     repo = g.get_repo(REPO)
@@ -268,6 +283,8 @@ def get_unprocessed_issue():
         if i.pull_request is None:
             return i
         if _pr_has_unaddressed_review_comments(repo, i.number):
+            return i
+        if _pr_has_merge_conflicts(repo, i.number):
             return i
 
     return None
