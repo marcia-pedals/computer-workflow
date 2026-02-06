@@ -17,6 +17,7 @@ INSTALLATION_ID = 108446080
 
 parser = argparse.ArgumentParser(description="Poll GitHub issues and process them with Claude")
 parser.add_argument("--repo", required=True, help="Target GitHub repo (owner/name)")
+parser.add_argument("--poll", action="store_true", help="Poll continuously for new issues instead of processing one and exiting")
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--token-path", help="Path to a file containing a GitHub token")
 group.add_argument("--secret-key-path", help="Path to the GitHub App private key PEM file")
@@ -48,31 +49,9 @@ g = Github(auth=Auth.Token(token))
 repo = g.get_repo(REPO)
 processed_issues = set()
 
-print("Starting issue polling loop...")
-
-while True:
-    # Refresh token in case it has been updated / regenerate if using secret key
+def process_issue(issue):
+    """Clone the repo, run Claude Code on the issue, return True on success."""
     token = get_token()
-    g = Github(auth=Auth.Token(token))
-    repo = g.get_repo(REPO)
-
-    issues = list(repo.get_issues(state="open"))
-
-    if not issues:
-        print("No open issues found. Waiting for new issues...")
-        time.sleep(POLL_INTERVAL)
-        continue
-
-    # Find unprocessed issues (sorted by created date descending by default)
-    unprocessed_issues = [issue for issue in issues if issue.number not in processed_issues]
-
-    if not unprocessed_issues:
-        print(f"All {len(issues)} open issue(s) already processed. Waiting for new issues...")
-        time.sleep(POLL_INTERVAL)
-        continue
-
-    # Process the latest unprocessed issue
-    issue = unprocessed_issues[0]
     print(f"Working on #{issue.number}: {issue.title}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,10 +81,10 @@ while True:
 
         # Run Claude Code headless
         prompt = (
-            f"There is a GitHub issue #{issue.number}: \"{issue.title}\"\n\n"
-            f"{issue.body or '(no description)'}\n\n"
-            f"Please work on this issue. Create a new branch, make the changes, "
-            f"push the branch, and create a pull request that closes #{issue.number}."
+          f"Make a pull request resolving issue #{issue.number}.\n\n" +
+          "If appropriate, test your changes in marcia-pedals/clever-computer-test by: " +
+          "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py " +
+          "with --repo marcia-pedals/clever-computer-test and --toke-path $HOME/.github-app-token\n\n" +
         )
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
@@ -150,13 +129,43 @@ while True:
 
         proc.wait()
 
-        # Mark this issue as processed regardless of success/failure
-        processed_issues.add(issue.number)
-
         if proc.returncode == 0:
             print(f"Successfully processed issue #{issue.number}")
         else:
             print(f"Failed to process issue #{issue.number} (exit code: {proc.returncode})")
 
-    print(f"Waiting {POLL_INTERVAL} seconds before checking for new issues...")
-    time.sleep(POLL_INTERVAL)
+
+def get_unprocessed_issue():
+    """Fetch open issues and return the first unprocessed one, or None."""
+    token = get_token()
+    g = Github(auth=Auth.Token(token))
+    repo = g.get_repo(REPO)
+    issues = list(repo.get_issues(state="open"))
+
+    if not issues:
+        return None
+
+    unprocessed = [i for i in issues if i.number not in processed_issues]
+    return unprocessed[0] if unprocessed else None
+
+
+if args.poll:
+    print("Starting issue polling loop...")
+    while True:
+        issue = get_unprocessed_issue()
+        if issue is None:
+            print(f"No unprocessed issues. Waiting {POLL_INTERVAL}s...")
+            time.sleep(POLL_INTERVAL)
+            continue
+
+        process_issue(issue)
+        processed_issues.add(issue.number)
+
+        print(f"Waiting {POLL_INTERVAL} seconds before checking for new issues...")
+        time.sleep(POLL_INTERVAL)
+else:
+    issue = get_unprocessed_issue()
+    if issue is None:
+        print("No unprocessed open issues found.")
+    else:
+        process_issue(issue)
