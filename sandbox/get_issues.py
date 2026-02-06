@@ -12,7 +12,7 @@ TOKEN_PATH = Path.home() / ".github-app-token"
 SCRIPT_DIR = Path(__file__).parent
 CREDENTIAL_HELPER = SCRIPT_DIR / "git-credential-app.py"
 BIN_DIR = str(SCRIPT_DIR / "bin")
-POLL_INTERVAL = 60  # Poll every 60 seconds
+POLL_INTERVAL = 15
 
 token = TOKEN_PATH.read_text().strip()
 g = Github(auth=Auth.Token(token))
