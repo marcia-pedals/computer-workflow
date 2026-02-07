@@ -15,10 +15,10 @@ import argparse
 import subprocess
 import sys
 import time
-import signal
 from pathlib import Path
 
 from github import Auth, Github
+from github.Issue import Issue
 
 SCRIPT_DIR = Path(__file__).parent
 
@@ -36,7 +36,7 @@ g = Github(auth=Auth.Token(token))
 repo = g.get_repo(REPO)
 
 
-def close_all_issues_and_prs():
+def close_all_issues_and_prs() -> int:
     """Close all open issues and PRs in the repo."""
     print("\n▶ Closing all open issues and PRs...")
     issues = list(repo.get_issues(state="open"))
@@ -50,7 +50,7 @@ def close_all_issues_and_prs():
     return closed_count
 
 
-def create_test_issues():
+def create_test_issues() -> list[Issue]:
     """Create sample test issues."""
     print("\n▶ Creating test issues...")
     issues = []
@@ -80,7 +80,7 @@ def create_test_issues():
     return issues
 
 
-def run_polling_loop(duration):
+def run_polling_loop(duration: int) -> tuple[str, int]:
     """Run get_issues.py in polling mode for a specified duration."""
     cmd = [
         sys.executable,
@@ -125,10 +125,11 @@ def run_polling_loop(duration):
         print("="*60)
         print(output)
 
-    return proc.returncode
+    returncode = proc.returncode or 0
+    return output or "", returncode
 
 
-def verify_issues_processed(issues):
+def verify_issues_processed(issues: list[Issue]) -> bool:
     """Verify that at least some issues were claimed/processed."""
     print("\n▶ Verifying issues were processed...")
     claimed_count = 0
@@ -186,7 +187,7 @@ def main():
         issues = create_test_issues()
 
         # Step 3: Run the polling loop
-        returncode = run_polling_loop(args.poll_duration)
+        _output, _returncode = run_polling_loop(args.poll_duration)
 
         # Step 4: Verify issues were processed
         success = verify_issues_processed(issues)

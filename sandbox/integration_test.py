@@ -14,8 +14,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 from github import Auth, Github
+from github.Issue import Issue
+from github.PullRequest import PullRequest
 
 SCRIPT_DIR = Path(__file__).parent
 
@@ -32,7 +35,7 @@ g = Github(auth=Auth.Token(token))
 repo = g.get_repo(REPO)
 
 
-def run_get_issues_py(issue_number):
+def run_get_issues_py(issue_number: int) -> bool:
     """Run get_issues.py with --test-prompt and --process-issue for the given issue number."""
     cmd = [
         sys.executable,
@@ -50,7 +53,7 @@ def run_get_issues_py(issue_number):
     return True
 
 
-def verify_claimed(issue, should_be_claimed=True):
+def verify_claimed(issue: Issue, should_be_claimed: bool = True) -> None:
     """Verify if an issue has the 'claimed' label."""
     issue.update()  # Refresh issue state
     is_claimed = any(label.name == "claimed" for label in issue.labels)
@@ -62,7 +65,7 @@ def verify_claimed(issue, should_be_claimed=True):
         print(f"✓ Issue #{issue.number} is not claimed")
 
 
-def verify_pr_exists(issue, max_wait=30):
+def verify_pr_exists(issue: Issue, max_wait: int = 30) -> PullRequest:
     """Verify that a PR was created for the issue.
 
     Args:
@@ -98,7 +101,7 @@ def verify_pr_exists(issue, max_wait=30):
     raise AssertionError(f"No PR found for issue #{issue.number} after waiting {max_wait}s")
 
 
-def verify_review_dismissed(pr):
+def verify_review_dismissed(pr: PullRequest) -> None:
     """Verify that CHANGES_REQUESTED reviews were dismissed."""
     pr_obj = repo.get_pull(pr.number)
     reviews = list(pr_obj.get_reviews())
@@ -108,7 +111,7 @@ def verify_review_dismissed(pr):
     print(f"✓ All CHANGES_REQUESTED reviews on PR #{pr.number} have been dismissed")
 
 
-def test_issue_to_pr():
+def test_issue_to_pr() -> tuple[bool, Issue, Optional[PullRequest]]:
     """Test: Issue created -> creates PR for it and claims the issue."""
     print("\n" + "="*60)
     print("TEST 1: Issue -> PR Creation")
@@ -165,7 +168,7 @@ def test_issue_to_pr():
         return False, issue, None
 
 
-def test_changes_requested(pr):
+def test_changes_requested(pr: Optional[PullRequest]) -> bool:
     """Test: Changes requested -> claims PR, updates PR, unclaims PR, dismisses review."""
     print("\n" + "="*60)
     print("TEST 2: Changes Requested Flow")
@@ -180,7 +183,7 @@ def test_changes_requested(pr):
     try:
         # Create a review requesting changes
         pr_obj = repo.get_pull(pr.number)
-        review = pr_obj.create_review(
+        _review = pr_obj.create_review(
             body="Please make some changes for testing purposes.",
             event="REQUEST_CHANGES"
         )
@@ -204,7 +207,7 @@ def test_changes_requested(pr):
         return False
 
 
-def test_merge_conflict():
+def test_merge_conflict() -> bool:
     """Test: Conflict with base -> claims PR, updates PR, unclaims PR."""
     print("\n" + "="*60)
     print("TEST 3: Merge Conflict Flow")
@@ -251,18 +254,18 @@ def test_merge_conflict():
 
         # Wait for GitHub to detect the conflict
         time.sleep(3)
-        pr = repo.get_pull(pr.number)
-        if pr.mergeable is None:
+        pr_obj = repo.get_pull(pr.number)
+        if pr_obj.mergeable is None:  # type: ignore[reportUnnecessaryComparison]
             print("⏳ Waiting for GitHub to compute mergeable status...")
             time.sleep(5)
-            pr = repo.get_pull(pr.number)
+            pr_obj = repo.get_pull(pr.number)
 
-        if pr.mergeable is not False:
-            print(f"⚠ Warning: PR mergeable status is {pr.mergeable}, expected False")
+        if not (pr_obj.mergeable is False):
+            print(f"⚠ Warning: PR mergeable status is {pr_obj.mergeable}, expected False")
             print("⏭ SKIPPED: Could not create merge conflict (GitHub might need more time)")
             return False
 
-        print(f"✓ Confirmed PR #{pr.number} has merge conflict (mergeable={pr.mergeable})")
+        print(f"✓ Confirmed PR #{pr.number} has merge conflict (mergeable={pr_obj.mergeable})")
 
         # Process the PR
         pr_issue = repo.get_issue(pr.number)
@@ -287,7 +290,7 @@ def test_merge_conflict():
         return False
 
 
-def cleanup(issue, pr):
+def cleanup(issue: Issue, pr: Optional[PullRequest]) -> None:
     """Clean up test artifacts."""
     print("\n" + "="*60)
     print("CLEANUP")
