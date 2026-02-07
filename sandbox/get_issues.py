@@ -21,7 +21,8 @@ MAX_WORKERS: int = 5
 TEST_INSTRUCTIONS: str = (
     "\n\nIf appropriate, test your changes in marcia-pedals/clever-computer-test by: "
     "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py "
-    "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path {token_path}"
+    "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
+    "\n\nFor Python changes: Run pyright"
 )
 
 APP_ID: int = 2810181
