@@ -19,6 +19,7 @@
             pkgs.tart
             pkgs.softnet
             pkgs.sshpass
+            pkgs.pyright
             (pkgs.python3.withPackages (ps: [
               ps.pygithub
             ]))
@@ -32,6 +33,7 @@
             pkgs.nodejs
             pkgs.gh
             pkgs.git
+            pkgs.pyright
             (pkgs.python3.withPackages (ps: [
               ps.pygithub
             ]))
