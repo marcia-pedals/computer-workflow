@@ -9,9 +9,9 @@ import time
 
 from github_app_token import get_token
 
-REFRESH_INTERVAL = 30 * 60  # 30 minutes (tokens last 1 hour)
+REFRESH_INTERVAL: int = 30 * 60  # 30 minutes (tokens last 1 hour)
 
-SSH_OPTS = [
+SSH_OPTS: list[str] = [
     "-o", "StrictHostKeyChecking=no",
     "-o", "UserKnownHostsFile=/dev/null",
     "-o", "LogLevel=ERROR",
@@ -19,8 +19,8 @@ SSH_OPTS = [
 ]
 
 
-def push_token(private_key: str, app_id: int, installation_id: int, vm_ip: str):
-    token = get_token(private_key, app_id, installation_id)
+def push_token(private_key: str, app_id: int, installation_id: int, vm_ip: str) -> None:
+    token: str = get_token(private_key, app_id, installation_id)
     subprocess.run(
         ["sshpass", "-e", "ssh", *SSH_OPTS, f"admin@{vm_ip}",
          f"echo '{token}' > ~/.github-app-token"],
@@ -30,8 +30,8 @@ def push_token(private_key: str, app_id: int, installation_id: int, vm_ip: str):
     print(f"Token pushed to {vm_ip}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Push GitHub App token to sandbox VM")
+def main() -> None:
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description="Push GitHub App token to sandbox VM")
     parser.add_argument("private_key", help="Path to the GitHub App private key PEM file")
     parser.add_argument("vm_ip", help="IP address of the sandbox VM")
     parser.add_argument("--app-id", type=int, required=True, help="GitHub App ID")
@@ -39,7 +39,7 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--once", action="store_true", help="Push token once and exit")
     group.add_argument("--continuous", action="store_true", help="Push token and keep refreshing")
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
     push_token(args.private_key, args.app_id, args.installation_id, args.vm_ip)
 
