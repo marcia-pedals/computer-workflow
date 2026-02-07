@@ -1,0 +1,14 @@
+# Test Instructions
+
+When making changes to Python files in this repository, you must:
+
+1. **Run pyright type checking** to ensure all type annotations are correct and no type errors are introduced:
+   ```bash
+   pyright
+   ```
+
+2. Ensure all Python files maintain full type annotations as configured in `pyrightconfig.json`
+
+3. Fix any type errors before submitting changes
+
+The repository uses strict type checking mode. All Python code must be fully annotated with type hints.

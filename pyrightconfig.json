@@ -1,0 +1,16 @@
+{
+  "include": [
+    "host",
+    "sandbox"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.git"
+  ],
+  "typeCheckingMode": "strict",
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownVariableType": false,
+  "pythonVersion": "3.11"
+}
