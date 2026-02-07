@@ -23,6 +23,10 @@ TEST_INSTRUCTIONS: str = (
     "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py "
     "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
     "\n\nFor Python changes: Run pyright"
+    "\n\nWhen addressing review comments on a PR, use these commands to get ALL review feedback:"
+    "\n  - gh api repos/{{owner}}/{{repo}}/pulls/{{pr_number}}/reviews (gets review summaries and states)"
+    "\n  - gh api repos/{{owner}}/{{repo}}/pulls/{{pr_number}}/comments (gets inline/file review comments)"
+    "\nNote: gh pr view does NOT include inline review comments, so always use the gh api commands above."
 )
 
 APP_ID: int = 2810181
