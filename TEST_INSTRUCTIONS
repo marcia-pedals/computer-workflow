@@ -1,0 +1,62 @@
+# Testing Instructions for clever-computer
+
+## Running Integration Tests
+
+To test changes to the clever-computer workflow, run the integration test suite against the test repository:
+
+```bash
+cd sandbox
+python3 integration_test.py \
+  --repo marcia-pedals/clever-computer-test \
+  --token-path /Users/admin/.github-app-token
+```
+
+This will test the following flows:
+1. **Issue -> PR Creation**: Creates a test issue, processes it, verifies a PR is created and labels are correct
+2. **Changes Requested**: Creates a review requesting changes on a PR, processes it, verifies the review is dismissed
+3. **Merge Conflict**: Creates a PR with a merge conflict, processes it, verifies the conflict is handled
+
+The integration tests use `--test-prompt` for faster execution and call `process_issue` directly without polling.
+
+## Important Notes
+
+- **Update integration tests**: When adding new functionality, update `integration_test.py` to test it
+- The tests will create and clean up test issues/PRs automatically
+- Tests run sequentially and take a few minutes to complete
+- All tests use the simplified test prompt to keep execution fast
+
+## Polling Integration Test (Optional)
+
+There is also a polling integration test that verifies the continuous polling functionality:
+
+```bash
+cd sandbox
+python3 integration_test_polling.py \
+  --repo marcia-pedals/clever-computer-test \
+  --token-path /Users/admin/.github-app-token \
+  --poll-duration 60
+```
+
+**⚠️ WARNING**: This test closes ALL open issues and PRs in the test repository before running.
+**DO NOT** run this test in parallel with other tests or while the production polling loop is running.
+
+## Manual Testing (Not Recommended)
+
+If you need to manually test specific scenarios:
+
+1. Create test issues/PRs in marcia-pedals/clever-computer-test using `gh`:
+   ```bash
+   gh issue create --repo marcia-pedals/clever-computer-test --title "Test" --body "Test issue"
+   ```
+
+2. Run get_issues.py directly:
+   ```bash
+   cd sandbox
+   python3 get_issues.py \
+     --repo marcia-pedals/clever-computer-test \
+     --test-prompt \
+     --process-issue <issue_number> \
+     --token-path /Users/admin/.github-app-token
+   ```
+
+However, running the automated integration tests is preferred as it ensures consistent, repeatable testing.
