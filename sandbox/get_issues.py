@@ -22,7 +22,6 @@ TEST_INSTRUCTIONS: str = (
     "\n\nIf appropriate, test your changes in marcia-pedals/clever-computer-test by running: "
     "cd sandbox && python3 test_issue_to_pr.py && python3 test_changes_requested.py && python3 test_merge_conflict.py"
     "\n\nRemember to update the integration tests if you add new functionality."
-    "\n\nFor Python changes: Run pyright"
 )
 
 APP_ID: int = 2810181
