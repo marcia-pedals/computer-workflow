@@ -212,8 +212,8 @@ def process_issue(issue, reason="issue", task_num=None):
           else:
             prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
-          token_path = os.path.expanduser("~/.github-app-token")
-          test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path)
+          test_instructions_token_path = os.path.expanduser("~/.github-app-token")
+          test_instructions = TEST_INSTRUCTIONS.format(token_path=test_instructions_token_path)
 
           if reason == "issue":
             prompt = f"Make a pull request resolving issue #{issue.number}." + test_instructions
