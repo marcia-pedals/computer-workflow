@@ -18,7 +18,7 @@ MAX_WORKERS = 5
 TEST_INSTRUCTIONS = (
     "\n\nIf appropriate, test your changes in marcia-pedals/clever-computer-test by: "
     "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py "
-    "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
+    "with --repo marcia-pedals/clever-computer-test --test-prompt --process-issue <issue_number> and --token-path {token_path}"
 )
 
 APP_ID = 2810181
@@ -28,6 +28,7 @@ parser = argparse.ArgumentParser(description="Poll GitHub issues and process the
 parser.add_argument("--repo", required=True, help="Target GitHub repo (owner/name)")
 parser.add_argument("--poll", action="store_true", help="Poll continuously for new issues instead of processing one and exiting")
 parser.add_argument("--test-prompt", action="store_true", help="Use a simplified prompt for faster testing")
+parser.add_argument("--process-issue", type=int, metavar="ISSUE_NUMBER", help="Process a specific issue number instead of finding the next unprocessed one")
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--token-path", help="Path to a file containing a GitHub token")
 group.add_argument("--secret-key-path", help="Path to the GitHub App private key PEM file")
@@ -206,14 +207,16 @@ def process_issue(issue, reason="issue", task_num=None):
             )
             print(f"{prefix}Checked out PR branch: {pr_branch}")
 
+        # Set token_path for use in environment variable
+        token_path_str = os.path.expanduser("~/.github-app-token")
+
         if args.test_prompt:
           if issue.pull_request is None:
             prompt = f"Make a dummy pull request for issue #{issue.number} for testing purposes. Keep changes minimal."
           else:
             prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
-          test_instructions_token_path = os.path.expanduser("~/.github-app-token")
-          test_instructions = TEST_INSTRUCTIONS.format(token_path=test_instructions_token_path)
+          test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path_str)
 
           if reason == "issue":
             prompt = f"Make a pull request resolving issue #{issue.number}." + test_instructions
@@ -231,7 +234,7 @@ def process_issue(issue, reason="issue", task_num=None):
             **os.environ,
             "PATH": f"{BIN_DIR}:{os.environ.get('PATH', '')}",
             "GIT_TERMINAL_PROMPT": "0",
-            "CW_GITHUB_TOKEN_PATH": str(token_path),
+            "CW_GITHUB_TOKEN_PATH": token_path_str,
         }
 
         proc = subprocess.Popen(
@@ -324,6 +327,9 @@ def get_unprocessed_issue():
 
 
 if args.poll:
+    if args.process_issue:
+        print("Error: --poll and --process-issue cannot be used together")
+        exit(1)
     print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         # List of 3-tuples: (future, issue_number, task_num)
@@ -364,8 +370,23 @@ if args.poll:
                 # Brief sleep to avoid tight loop when we have capacity but no issues
                 time.sleep(1)
 else:
-    issue, reason = get_unprocessed_issue()
-    if issue is None:
-        print("No unprocessed open issues found.")
-    else:
+    if args.process_issue:
+        # Process a specific issue by number
+        issue = repo.get_issue(args.process_issue)
+        # Determine the reason based on issue state
+        if issue.pull_request is None:
+            reason = "issue"
+        elif _pr_has_unaddressed_review_comments(repo, issue.number):
+            reason = "review_comments"
+        elif _pr_has_merge_conflicts(repo, issue.number):
+            reason = "merge_conflict"
+        else:
+            reason = "issue"  # Default to issue for PRs without special conditions
         process_issue(issue, reason)
+    else:
+        # Find and process the next unprocessed issue
+        issue, reason = get_unprocessed_issue()
+        if issue is None:
+            print("No unprocessed open issues found.")
+        else:
+            process_issue(issue, reason)
