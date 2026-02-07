@@ -345,8 +345,13 @@ if args.poll:
     if args.process_issue:
         print("Error: --poll and --process-issue cannot be used together")
         exit(1)
+
+    poll_start_time: float = 0.0
+    poll_timeout: float = 600.0  # 10 minutes
+
     if args.poll_until_no_work:
         print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers (will exit when no work remains)...")
+        poll_start_time = time.time()
     else:
         print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -355,6 +360,13 @@ if args.poll:
         next_task_num: int = 0
 
         while True:
+            # Check timeout if in poll-until-no-work mode
+            if args.poll_until_no_work:
+                elapsed: float = time.time() - poll_start_time
+                if elapsed > poll_timeout:
+                    print(f"\n❌ ERROR: Polling loop timed out after {int(elapsed)} seconds")
+                    print(f"   Still had {len(active_tasks)} active tasks when timeout occurred")
+                    exit(1)
             # Remove completed futures
             active_tasks = [(f, issue_num, task_num) for f, issue_num, task_num in active_tasks if not f.done()]
 
