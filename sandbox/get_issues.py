@@ -19,10 +19,9 @@ MAX_WORKERS: int = 5
 
 # Template for test instructions appended to prompts
 TEST_INSTRUCTIONS: str = (
-    "\n\nIf appropriate, test your changes in marcia-pedals/clever-computer-test by: "
-    "(1) using gh to insert test issues/prs/reviews/etc into the repo and (2) running get_issues.py "
-    "with --repo marcia-pedals/clever-computer-test --test-prompt and --token-path {token_path}"
-    "\n\nFor Python changes: Run pyright"
+    "\n\nIf appropriate, test your changes in marcia-pedals/clever-computer-test by running: "
+    "cd sandbox && python3 test_issue_to_pr.py && python3 test_changes_requested.py && python3 test_merge_conflict.py"
+    "\n\nRemember to update the integration tests if you add new functionality."
 )
 
 APP_ID: int = 2810181
@@ -31,6 +30,7 @@ INSTALLATION_ID: int = 108446080
 parser: argparse.ArgumentParser = argparse.ArgumentParser(description="Poll GitHub issues and process them with Claude")
 parser.add_argument("--repo", required=True, help="Target GitHub repo (owner/name)")
 parser.add_argument("--poll", action="store_true", help="Poll continuously for new issues instead of processing one and exiting")
+parser.add_argument("--poll-until-no-work", action="store_true", help="Exit when there is no work left (used with --poll)")
 parser.add_argument("--test-prompt", action="store_true", help="Use a simplified prompt for faster testing")
 parser.add_argument("--process-issue", type=int, metavar="ISSUE_NUMBER", help="Process a specific issue number instead of finding the next unprocessed one")
 group = parser.add_mutually_exclusive_group(required=True)
@@ -344,13 +344,28 @@ if args.poll:
     if args.process_issue:
         print("Error: --poll and --process-issue cannot be used together")
         exit(1)
-    print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers...")
+
+    poll_start_time: float = 0.0
+    poll_timeout: float = 600.0  # 10 minutes
+
+    if args.poll_until_no_work:
+        print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers (will exit when no work remains)...")
+        poll_start_time = time.time()
+    else:
+        print(f"Starting issue polling loop with {MAX_WORKERS} parallel workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         # List of 3-tuples: (future, issue_number, task_num)
         active_tasks: list[tuple[Future[None], int, int]] = []
         next_task_num: int = 0
 
         while True:
+            # Check timeout if in poll-until-no-work mode
+            if args.poll_until_no_work:
+                elapsed: float = time.time() - poll_start_time
+                if elapsed > poll_timeout:
+                    print(f"\n❌ ERROR: Polling loop timed out after {int(elapsed)} seconds")
+                    print(f"   Still had {len(active_tasks)} active tasks when timeout occurred")
+                    exit(1)
             # Remove completed futures
             active_tasks = [(f, issue_num, task_num) for f, issue_num, task_num in active_tasks if not f.done()]
 
@@ -365,9 +380,13 @@ if args.poll:
                     active_tasks.append((future, unprocessed_issue.number, task_num))
                 elif len(active_tasks) == 0:
                     # No issues and no active workers
-                    print(f"No unprocessed issues. Waiting {POLL_INTERVAL}s...")
-                    time.sleep(POLL_INTERVAL)
-                    continue
+                    if args.poll_until_no_work:
+                        print("No unprocessed issues and no active workers. Exiting.")
+                        break
+                    else:
+                        print(f"No unprocessed issues. Waiting {POLL_INTERVAL}s...")
+                        time.sleep(POLL_INTERVAL)
+                        continue
 
             # If all workers are busy, wait for at least one to complete
             if len(active_tasks) >= MAX_WORKERS:
