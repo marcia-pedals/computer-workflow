@@ -9,5 +9,5 @@ TOKEN_PATH = Path.home() / ".github-app-token"
 if len(sys.argv) > 1 and sys.argv[1] == "get":
     sys.stdin.read()
     token = TOKEN_PATH.read_text().strip()
-    print(f"username=x-access-token")
+    print("username=x-access-token")
     print(f"password={token}")

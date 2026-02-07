@@ -24,14 +24,31 @@ TEST_INSTRUCTIONS = (
 APP_ID = 2810181
 INSTALLATION_ID = 108446080
 
-parser = argparse.ArgumentParser(description="Poll GitHub issues and process them with Claude")
+parser = argparse.ArgumentParser(
+    description="Poll GitHub issues and process them with Claude"
+)
 parser.add_argument("--repo", required=True, help="Target GitHub repo (owner/name)")
-parser.add_argument("--poll", action="store_true", help="Poll continuously for new issues instead of processing one and exiting")
-parser.add_argument("--test-prompt", action="store_true", help="Use a simplified prompt for faster testing")
-parser.add_argument("--process-issue", type=int, metavar="ISSUE_NUMBER", help="Process a specific issue number instead of finding the next unprocessed one")
+parser.add_argument(
+    "--poll",
+    action="store_true",
+    help="Poll continuously for new issues instead of processing one and exiting",
+)
+parser.add_argument(
+    "--test-prompt",
+    action="store_true",
+    help="Use a simplified prompt for faster testing",
+)
+parser.add_argument(
+    "--process-issue",
+    type=int,
+    metavar="ISSUE_NUMBER",
+    help="Process a specific issue number instead of finding the next unprocessed one",
+)
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--token-path", help="Path to a file containing a GitHub token")
-group.add_argument("--secret-key-path", help="Path to the GitHub App private key PEM file")
+group.add_argument(
+    "--secret-key-path", help="Path to the GitHub App private key PEM file"
+)
 args = parser.parse_args()
 
 REPO = args.repo
@@ -59,11 +76,13 @@ g = Github(auth=Auth.Token(token))
 
 repo = g.get_repo(REPO)
 
+
 def claim_issue(issue, task_num=None):
     """Add the 'claimed' label to an issue."""
     issue.add_to_labels("claimed")
     prefix = f"[{task_num}] " if task_num is not None else ""
     print(f"{prefix}Added 'claimed' label to issue #{issue.number}")
+
 
 def unclaim_issue(issue, task_num=None):
     """Remove the 'claimed' label from a PR (not a regular issue)."""
@@ -72,6 +91,7 @@ def unclaim_issue(issue, task_num=None):
     issue.remove_from_labels("claimed")
     prefix = f"[{task_num}] " if task_num is not None else ""
     print(f"{prefix}Removed 'claimed' label from PR #{issue.number}")
+
 
 def re_request_reviews(issue, task_num=None):
     """Dismiss CHANGES_REQUESTED reviews and re-request reviews from all reviewers."""
@@ -93,7 +113,10 @@ def re_request_reviews(issue, task_num=None):
     prefix = f"[{task_num}] " if task_num is not None else ""
     if reviewers:
         pr.create_review_request(reviewers=list(reviewers))
-        print(f"{prefix}Dismissed stale reviews and re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}")
+        print(
+            f"{prefix}Dismissed stale reviews and re-requested reviews from {', '.join(reviewers)} on PR #{issue.number}"
+        )
+
 
 def parse_and_display_stream_line(line, task_num=None, output_buffer=None):
     """Parse a JSON stream line and display relevant information."""
@@ -115,7 +138,7 @@ def parse_and_display_stream_line(line, task_num=None, output_buffer=None):
                         status_icon = {
                             "in_progress": "🔄",
                             "completed": "✅",
-                            "pending": "⏳"
+                            "pending": "⏳",
                         }.get(todo["status"], "•")
                         todo_msg = f"{prefix}  {status_icon} {todo['content']} ({todo['status']})"
                         print(todo_msg)
@@ -142,6 +165,7 @@ def parse_and_display_stream_line(line, task_num=None, output_buffer=None):
     except json.JSONDecodeError:
         # If it's not valid JSON, just pass it through
         pass
+
 
 def process_issue(issue, reason="issue", task_num=None):
     """Clone the repo, run Claude Code on the issue, return True on success.
@@ -187,22 +211,31 @@ def process_issue(issue, reason="issue", task_num=None):
         token_path_str = os.path.expanduser("~/.github-app-token")
 
         if args.test_prompt:
-          if issue.pull_request is None:
-            prompt = f"Make a dummy pull request for issue #{issue.number} for testing purposes. Keep changes minimal."
-          else:
-            prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
+            if issue.pull_request is None:
+                prompt = f"Make a dummy pull request for issue #{issue.number} for testing purposes. Keep changes minimal."
+            else:
+                prompt = f"Make a dummy update to PR #{issue.number} for testing purposes. Keep changes minimal."
         else:
-          test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path_str)
+            test_instructions = TEST_INSTRUCTIONS.format(token_path=token_path_str)
 
-          if reason == "issue":
-            prompt = f"Make a pull request resolving issue #{issue.number}." + test_instructions
-          elif reason == "review_comments":
-            prompt = f"Update #{issue.number} to address the latest review." + test_instructions
-          elif reason == "merge_conflict":
-            prompt = f"Resolve conflicts with base in #{issue.number}." + test_instructions
-          else:
-            # Fallback for unknown reason
-            prompt = f"Update #{issue.number}." + test_instructions
+            if reason == "issue":
+                prompt = (
+                    f"Make a pull request resolving issue #{issue.number}."
+                    + test_instructions
+                )
+            elif reason == "review_comments":
+                prompt = (
+                    f"Update #{issue.number} to address the latest review."
+                    + test_instructions
+                )
+            elif reason == "merge_conflict":
+                prompt = (
+                    f"Resolve conflicts with base in #{issue.number}."
+                    + test_instructions
+                )
+            else:
+                # Fallback for unknown reason
+                prompt = f"Update #{issue.number}." + test_instructions
 
         # Prepend bin/ to PATH so our gh wrapper is used instead of the real gh.
         # Disable interactive git prompts in case macOS keychain dialog triggers.
@@ -218,7 +251,8 @@ def process_issue(issue, reason="issue", task_num=None):
                 "claude",
                 "--print",
                 "--dangerously-skip-permissions",
-                "--output-format", "stream-json",
+                "--output-format",
+                "stream-json",
                 "--verbose",
             ],
             stdin=subprocess.PIPE,
@@ -252,7 +286,9 @@ def process_issue(issue, reason="issue", task_num=None):
             unclaim_issue(issue, task_num)
             re_request_reviews(issue, task_num)
         else:
-            print(f"\n{prefix}❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})")
+            print(
+                f"\n{prefix}❌ Failed to process issue #{issue.number} (exit code: {proc.returncode})"
+            )
 
 
 def _pr_has_unaddressed_review_comments(repo, pr_number):
@@ -314,7 +350,11 @@ if args.poll:
 
         while True:
             # Remove completed futures
-            active_tasks = [(f, issue_num, task_num) for f, issue_num, task_num in active_tasks if not f.done()]
+            active_tasks = [
+                (f, issue_num, task_num)
+                for f, issue_num, task_num in active_tasks
+                if not f.done()
+            ]
 
             # If we have capacity, try to get a new issue
             if len(active_tasks) < MAX_WORKERS:
@@ -322,7 +362,9 @@ if args.poll:
                 if issue is not None:
                     task_num = next_task_num
                     next_task_num += 1
-                    print(f"[{task_num}] Assigning issue #{issue.number} to task {task_num}")
+                    print(
+                        f"[{task_num}] Assigning issue #{issue.number} to task {task_num}"
+                    )
                     future = executor.submit(process_issue, issue, reason, task_num)
                     active_tasks.append((future, issue.number, task_num))
                 elif len(active_tasks) == 0:
@@ -340,7 +382,9 @@ if args.poll:
                 for i, (f, issue_num, task_num) in enumerate(active_tasks):
                     if f == completed_future:
                         active_tasks.pop(i)
-                        print(f"[{task_num}] Task {task_num} finished processing issue #{issue_num}")
+                        print(
+                            f"[{task_num}] Task {task_num} finished processing issue #{issue_num}"
+                        )
                         break
             else:
                 # Brief sleep to avoid tight loop when we have capacity but no issues
